@@ -1,0 +1,12 @@
+# Ignore all the files in the pycache folder
+__pycache__/
+*.pyc
+
+# Ignore the Data folder
+Data/
+
+# Ignore the plots folder
+Plots/
+
+# Ignore all the wand files
+wandb/
