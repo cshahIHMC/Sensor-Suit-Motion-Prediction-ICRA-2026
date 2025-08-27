@@ -28,6 +28,7 @@ class GroupedSequenceDataset(Dataset):
     ):
         self.seq_len = seq_len
         self.time_col = time_col
+        self.indices = df.index.tolist()
         self.subject_col = subject_col
         self.condition_col = condition_col
         self.stride = stride
@@ -44,7 +45,8 @@ class GroupedSequenceDataset(Dataset):
         # Build groups: one DataFrame per (subject, condition)
         self.groups: Dict[Tuple, pd.DataFrame] = {}
         for key, g in df.groupby([subject_col, condition_col], sort=False):
-            g = g.sort_values(self.time_col).reset_index(drop=True)
+            # g = g.sort_values(self.time_col).reset_index(drop=True)
+            g = g.sort_index().reset_index(drop=True)
             self.groups[key] = g
 
         # # Global insole normalization stats (over this df)
