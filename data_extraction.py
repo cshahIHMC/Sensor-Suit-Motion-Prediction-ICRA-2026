@@ -72,7 +72,10 @@ def extract_write_2_csv(dataDir, SubjectName, dataWriteDir, weight=0.0):
 
             # Get the name of the type of data
             dataName = file[len(conditionName)+1:-4]
-  
+            
+            if dataName == "activity_flag" or dataName == "emg" or dataName == "moment" or dataName == "power" or dataName == "grf" or dataName == "moment_filt" or dataName == "imu_real":
+                continue 
+            
             # Data Path
             dataPath = conditionFolderPath + "/" + file
             # Read it into a pandas dataframe
@@ -88,7 +91,8 @@ def extract_write_2_csv(dataDir, SubjectName, dataWriteDir, weight=0.0):
             
             ## Add data from the different data folder to one single data frame right next to each other
             df_condition = pd.concat([df_condition, df_data], axis=1)
-              
+            
+                
         ## Remove duplicate cols
         df_condition = df_condition.loc[:, ~df_condition.columns.duplicated()]
             
@@ -101,6 +105,9 @@ def extract_write_2_csv(dataDir, SubjectName, dataWriteDir, weight=0.0):
         df_subject = pd.concat([df_subject, df_condition], axis=0, ignore_index=True)      
     
     print(df_subject.shape)
+    
+    # for col in df_subject.columns:
+        # print(col)
     df_subject.to_csv(dataWriteDir,
                     index=False,
                     float_format='%.6f',      # e.g. 0.123457
@@ -112,7 +119,7 @@ def extract_write_2_csv(dataDir, SubjectName, dataWriteDir, weight=0.0):
 def main():
     data_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/Scheerpeel_Data_set/ProcessedData/"
     sub_Name = "AB01/"
-    data_write_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/AB01_all_data.csv"
+    data_write_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/AB01_req_sim_data.csv"
     
     
     extract_write_2_csv(data_dir,sub_Name, data_write_dir, weight=78.90)
