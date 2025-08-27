@@ -116,10 +116,10 @@ def extract_write_2_csv(dataDir, subject_list, dataWriteDir):
     print(df_subjects.shape)
     # for col in df_subject.columns:
         # print(col)
-    # df_subjects.to_csv(dataWriteDir,
-    #                 index=False,
-    #                 float_format='%.6f',      # e.g. 0.123457
-    #                 quoting=csv.QUOTE_MINIMAL)
+    df_subjects.to_csv(dataWriteDir,
+                    index=False,
+                    float_format='%.6f',      # e.g. 0.123457
+                    quoting=csv.QUOTE_MINIMAL)
 
     
 

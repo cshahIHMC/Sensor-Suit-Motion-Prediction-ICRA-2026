@@ -10,3 +10,6 @@ Plots/
 
 # Ignore all the wand files
 wandb/
+
+# Ignore all saved models
+Saved Models/
