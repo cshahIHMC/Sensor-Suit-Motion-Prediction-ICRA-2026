@@ -49,11 +49,11 @@ def cal_validation_loss(model, validation_dataloader, lossFn, lossFn_no_reductio
     with torch.no_grad():
         for batch, meta in validation_dataloader:
             
-            PAE_inputs = batch
-            PAE_inputs = utility.ToDevice(PAE_inputs)
+            PAE_inputs = utility.ToDevice(batch)
                         
             # Predict
-            outputs, latent, signal, params  = model(PAE_inputs)
+            # outputs, latent, signal, params  = model(PAE_inputs)
+            outputs, _, _, _  = model(PAE_inputs)
                     
             # Flattening the outputs and inputs and calculating the loss
             flattened_inputs = PAE_inputs.reshape(PAE_inputs.shape[0], -1)
@@ -67,25 +67,23 @@ def cal_validation_loss(model, validation_dataloader, lossFn, lossFn_no_reductio
             
             # Calculate Individual Loss, first across sequence length and then across batches
             individual_loss = lossFn_no_reduction(PAE_inputs, outputs)
-            individual_loss_across_sequence_length = individual_loss.mean(2)
-            individual_loss_across_batch = individual_loss_across_sequence_length.mean(0)
+            individual_loss_across_sequence_length_across_batch = individual_loss.mean(2).mean(0)
             
-            individual_losses = individual_losses + ( utility.Item(individual_loss_across_batch).numpy() * PAE_inputs.size(0))
+            individual_losses = individual_losses + ( utility.Item(individual_loss_across_sequence_length_across_batch).numpy() * PAE_inputs.size(0))
             
+             # ensure no lingering references
+            del outputs, individual_loss_across_sequence_length_across_batch, loss
             
             # Append all the latents and signals
-            all_latents.append(utility.Item(latent))
-            all_signals.append(utility.Item(signal))
+            # all_latents.append(utility.Item(latent))
+            # all_signals.append(utility.Item(signal))  
             
         
         val_loss = val_loss / len(validation_dataloader.dataset)
         individual_losses = individual_losses / len(validation_dataloader.dataset)   
-          
-        latents_np = torch.cat(all_latents, dim=0).numpy()  
-        signals_np = torch.cat(all_signals, dim=0).numpy()      
         
         
-    return val_loss, individual_losses, latents_np, signals_np
+    return val_loss, individual_losses
 
 ## Training Function
 def train_model(model, config, training_dataloader, validation_dataloader, log_wandB=False):
@@ -111,6 +109,7 @@ def train_model(model, config, training_dataloader, validation_dataloader, log_w
     
     # Input data shape
     for batch, meta in training_dataloader:
+        print(len(training_dataloader))
         print(batch.shape)
         break
     
@@ -149,7 +148,7 @@ def train_model(model, config, training_dataloader, validation_dataloader, log_w
         print(f'Epoch [{epoch+1}/{epochs}], Training Loss: {train_loss}')
     
     
-        val_loss, individual_loss, latents_np, signal_np = cal_validation_loss(model, validation_dataloader, lossFn, lossFn_no_reduction)
+        val_loss, individual_loss = cal_validation_loss(model, validation_dataloader, lossFn, lossFn_no_reduction)
         validation_losses.append(val_loss)
         individual_losses.append(individual_loss)
         print(f'Epoch [{epoch+1}/{epochs}], Validation Loss: {val_loss}')
@@ -169,9 +168,9 @@ def train_model(model, config, training_dataloader, validation_dataloader, log_w
 def plot_df(dataloader, model, file_name="", col_names=""):
     
     model.eval()
-    fig, axs = plt.subplots(3, 7, figsize=(30,10), sharey=True)
+    fig, axs = plt.subplots(3, 7, figsize=(30,10), sharey=True, sharex=True)
     
-    step = 201
+    step = 50
     end_plot_timestep = 20000
     with torch.no_grad():
         
@@ -179,7 +178,7 @@ def plot_df(dataloader, model, file_name="", col_names=""):
             
             start_index = j*step
             
-            end_index = start_index + 401
+            end_index = start_index + 201
             
             # Transpose and convert to tensor
             input_tensor, meta = batch
@@ -258,43 +257,47 @@ def main():
     # Different Flags
     # Logging False
     log_wandB = False
-    train_and_plot = True
+    train_and_plot = False
     
-    file_name = "PAE training Scherpeel Dataset"
+    file_name = "PAE training Scherpeel Dataset - 10 Subjects - 25 epochs"
     project_name = "ICRA 2026"
     
     # COnfig the configurations
     config = {
         "training_tag": file_name,
         "project_name": project_name,
-        "epochs": 10,
+        "epochs": 25,
         "batch_size": 32,
         "num_workers": 8,
         "momentum":0.9,
         "lr": 1e-4,
         "dropout": 0.0,
         "dataset": "IHMC Senorsuit",
-        "seq_length": 401,
+        "seq_length": 201,
         "inputs": 21,
         "outputs": 21,
         "phases": 10,
         "intermediate_channels": 16,
-        "training_window": 2.0, # How many seconds of data you are reviewing
+        "training_window": 1.0, # How many seconds of data you are reviewing
         "data_recorded_rate": 200 # 
     }
     
     ## Login to weights and biases and setup the data recording run
     if log_wandB:
         wandb.login()
-        # project_name = config["project_name"]
-        # wandb.init( project=project_name, name= config["training_tag"], config=config)
+        project_name = config["project_name"]
+        wandb.init( project=project_name, name= config["training_tag"], config=config)
     
     # Data setup
-    data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/AB01_req_sim_data.csv"
+    data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/all_subjects_req_sim_data.csv"
     df = pd.read_csv(data_path)
+    
+    print("Full df Shape: ", df.shape)
     
     cols_2_get = col_2_extract()
     df_pae = df[cols_2_get]
+    
+    print("Extracted df Shape: ", df_pae.shape)
     
     subjects, conditions, all_pairs = utility.extract_pairs(df_pae, "subject", "condition")
     groups = utility.make_group_dict(df, "subject", "condition", "time")
@@ -326,6 +329,35 @@ def main():
     val_sampler_plot = GroupedBatchSampler(val_ds, batch_size=1, shuffle=False, drop_last=False)
     val_loader_plot  = DataLoader(val_ds, batch_sampler=val_sampler_plot, num_workers=8, pin_memory=True)
     
+    
+    
+    # all_feat0 = [] 
+    # i = 0
+    # for batch, meta in train_loader:
+    #     x_bt = batch[:, 1, :]   # take feature 0 → [B, T]
+    #     # print(x_bt.shape)
+    #     all_feat0.append(x_bt.detach().cpu().numpy().reshape(-1))  # → [B*T]
+    #     # print(len(all_feat0))
+    #     # break
+        
+    #     i = i+1
+        
+    #     if i%1000 == 0:
+    #         print(i)
+    #     if i == 20000:
+    #         break
+    
+    # feat0 = np.concatenate(all_feat0, axis=0)   # 1D: all batches/time concatenated
+    # print(len(feat0))
+    
+    # plt.figure()
+    # plt.plot(feat0)
+    # plt.title("First feature across all batches (concatenated)")
+    # plt.xlabel("Concatenated time index (B×T)")
+    # plt.ylabel("Feature 0 value")
+    # plt.show()
+    
+    
     # Model Setup
     
     if train_and_plot:
@@ -349,7 +381,7 @@ def main():
         
     else:
         
-        model_location = ""
+        model_location = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20250828_1224_PAE training Scherpeel Dataset.pth"
         weights = torch.load(model_location, weights_only=True)
         model = PAE.Model(
                           input_channels=config["inputs"],
@@ -361,9 +393,9 @@ def main():
         model.load_state_dict(weights)
     
     
-    # Plot all the different plots
-    plot_df(train_loader_plot, model)
-    plot_df(val_loader_plot, model)
+    # # Plot all the different plots
+    # plot_df(train_loader_plot, model)
+    # plot_df(val_loader_plot, model)
     
 
 

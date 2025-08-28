@@ -225,13 +225,18 @@ class GroupedBatchSampler(Sampler[List[int]]):
     
 
 def main():
-    df =pd.read_csv("/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/AB01_req_data.csv")
+    df =pd.read_csv("/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/all_subjects_req_sim_data.csv")
     print(df.shape)
     
     subjects, conditions, pairs = extract_pairs(df)
+    print(len(subjects))
+    print(len(conditions))
+    print(len(pairs))
     groups = make_group_dict(df)
+    print(groups)
     row_list = summarize_groups(groups)
-    windows = windows_per_group(groups, 200, 1)
+    print(row_list)
+    # windows = windows_per_group(groups, 200, 1)
     
     
 
