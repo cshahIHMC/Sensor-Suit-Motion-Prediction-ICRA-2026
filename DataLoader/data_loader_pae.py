@@ -19,6 +19,7 @@ class GroupedSequenceDataset(Dataset):
         self,
         df: pd.DataFrame,
         seq_len: int,
+        pred_len: int,
         time_col: str = "time",
         subject_col: str = "subject",
         condition_col: str = "condition",
@@ -27,6 +28,8 @@ class GroupedSequenceDataset(Dataset):
         dtype: torch.dtype = torch.float32,
     ):
         self.seq_len = seq_len
+        self.pred_len = pred_len
+        self.total_len = self.seq_len + self.pred_len
         self.time_col = time_col
         self.indices = df.index.tolist()
         self.subject_col = subject_col
@@ -59,29 +62,34 @@ class GroupedSequenceDataset(Dataset):
         self.index: List[Tuple[Tuple, int]] = []
         for key, g in self.groups.items():
             n = len(g)
-            if n >= self.seq_len:
-                for s in range(0, n - self.seq_len + 1, self.stride):
+            if n >= self.total_len:
+                for s in range(0, n - self.total_len + 1, self.stride):
                     self.index.append((key, s))
 
     def __len__(self):
         return len(self.index)
 
-    def _extract_block(self, g: pd.DataFrame, start: int, end: int) -> np.ndarray:
-        gyro = g.iloc[start:end, 0:21].to_numpy(dtype=np.float64, copy=True)
+    def _extract_block(self, g: pd.DataFrame, input_start: int, input_end: int, output_end:int) -> np.ndarray:
+        pae_input = g.iloc[input_start:input_end, 0:21].to_numpy(dtype=np.float64, copy=True)
+        mann_input = g.iloc[input_start:input_end, 0:43].to_numpy(dtype=np.float64, copy=True)
+        mann_output = g.iloc[input_end:output_end, 43:63].to_numpy(dtype=np.float64, copy=True)
+
         # ins = g.iloc[start:end, self.insole_slice].to_numpy(dtype=np.float64, copy=True)
         # ins = (ins - self.ins_mean.values) / self.ins_std.values
         # X = np.hstack([gyro, ins])  # shape: [T, F]
-        return gyro
+        return pae_input, mann_input, mann_output
 
     def __getitem__(self, i: int):
         key, s = self.index[i]
         g = self.groups[key]
 
-        X = self._extract_block(g, s, s + self.seq_len)           # [T, F]
-        X = torch.tensor(X, dtype=self.dtype).transpose(0, 1)     # [F, T]
+        PAE_input, MANN_input, MANN_output = self._extract_block(g, s, s + self.seq_len, s + self.total_len)           # [T, F]
+        PAE_input = torch.tensor(PAE_input, dtype=self.dtype).transpose(0, 1)     # [F, T]
+        MANN_input = torch.tensor(MANN_input, dtype=self.dtype).transpose(0, 1)
+        MANN_output = torch.tensor(MANN_output, dtype=self.dtype).transpose(0, 1)
 
         # Mean-center per feature
-        X = X - X.mean(dim=1, keepdim=True)
+        PAE_input = PAE_input - PAE_input.mean(dim=1, keepdim=True)
 
         meta = {
             "subject": key[0],
@@ -89,7 +97,8 @@ class GroupedSequenceDataset(Dataset):
             "start_idx": s,
             "group_key": key,
         }
-        return X, meta
+        # return PAE_input, MANN_input, MANN_output, meta
+        return PAE_input, MANN_input, MANN_output
 
 
 class GroupedBatchSampler(Sampler[List[int]]):
