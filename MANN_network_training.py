@@ -27,7 +27,7 @@ def col_2_extract():
             "RShank_V_ACCX", "RShank_V_ACCY", "RShank_V_ACCZ",
             "LFoot_V_ACCX", "LFoot_V_ACCY", "LFoot_V_ACCZ",
             "RFoot_V_ACCX", "RFoot_V_ACCY", "RFoot_V_ACCZ",
-            "weight"
+            "weight",
             "subject", "condition"
             ]
     
@@ -67,8 +67,11 @@ def main():
         wandb.init( project=project_name, name= config["training_tag"], config=config)
     
     # Data setup
-    data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/AB01_req_sim_data.csv"
+    data_path = "/home/chinmay/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/AB01_req_sim_data.csv"
     df = pd.read_csv(data_path)
+
+    for col in df.columns:
+        print(col)
     
     print("Full df Shape: ", df.shape)
     
