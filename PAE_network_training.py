@@ -259,14 +259,14 @@ def main():
     log_wandB = False
     train_and_plot = False
     
-    file_name = "PAE training Scherpeel Dataset - 10 Subjects - 25 epochs"
+    file_name = "PAE training Scherpeel Dataset - 10 Subjects 10 Phases - 25 epochs"
     project_name = "ICRA 2026"
     
     # COnfig the configurations
     config = {
         "training_tag": file_name,
         "project_name": project_name,
-        "epochs": 25,
+        "epochs": 30,
         "batch_size": 32,
         "num_workers": 8,
         "momentum":0.9,
@@ -381,7 +381,7 @@ def main():
         
     else:
         
-        model_location = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20250828_1224_PAE training Scherpeel Dataset.pth"
+        model_location = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20250829_0213_PAE training Scherpeel Dataset - 10 Subjects 10 Phases - 25 epochs.pth"
         weights = torch.load(model_location, weights_only=True)
         model = PAE.Model(
                           input_channels=config["inputs"],
@@ -394,8 +394,8 @@ def main():
     
     
     # # Plot all the different plots
-    # plot_df(train_loader_plot, model)
-    # plot_df(val_loader_plot, model)
+    plot_df(train_loader_plot, model)
+    plot_df(val_loader_plot, model)
     
 
 
