@@ -52,11 +52,19 @@ class GroupedSequenceDataset(Dataset):
             g = g.sort_index().reset_index(drop=True)
             self.groups[key] = g
 
-        # # Global insole normalization stats (over this df)
-        # insole_all = df.iloc[:, self.insole_slice]
-        # self.ins_mean = insole_all.mean()
-        # self.ins_std = insole_all.std()
-        # self.ins_std[self.ins_std == 0] = 1
+        # Global normalization for prediction inputs
+        inputs_all = df.iloc[:, 0:43]
+        self.input_mean = inputs_all.mean(axis=0)
+        self.input_std = inputs_all.std(axis=0)
+        self.input_std[self.input_std == 0] = 1
+        
+        # Global normalization for prediction inputs
+        outputs_all = df.iloc[:, 43:63]
+        self.output_mean = outputs_all.mean(axis=0)
+        self.output_std = outputs_all.std(axis=0)
+        self.output_std[self.output_std == 0] = 1
+        
+        # Global normalization for prediction outputs
 
         # Build window index: list of (group_key, start_idx)
         self.index: List[Tuple[Tuple, int]] = []
@@ -74,8 +82,9 @@ class GroupedSequenceDataset(Dataset):
         mann_input = g.iloc[input_start:input_end, 0:43].to_numpy(dtype=np.float64, copy=True)
         mann_output = g.iloc[input_end:output_end, 43:63].to_numpy(dtype=np.float64, copy=True)
 
-        # ins = g.iloc[start:end, self.insole_slice].to_numpy(dtype=np.float64, copy=True)
-        # ins = (ins - self.ins_mean.values) / self.ins_std.values
+        mann_input = (mann_input - self.input_mean.values) / self.input_std.values
+        mann_output = (mann_output - self.output_mean.values) / self.output_std.values
+        
         # X = np.hstack([gyro, ins])  # shape: [T, F]
         return pae_input, mann_input, mann_output
 

@@ -36,8 +36,6 @@ class FCNN(nn.Module):
         # No activation on the output layer
         x = self.layers[-1](x)
         
-        # Added this to be consistent with the +1,-1 of the sin cos
-        x = torch.tanh(x)
         return x
         
         
