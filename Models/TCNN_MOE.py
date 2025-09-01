@@ -4,6 +4,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.parametrizations import weight_norm
 
+def Normalize(X, N):
+    mean = N[0]
+    std = N[1]
+    return (X - mean) / std
 
 # Chomp1d ensures the output length is the same as the input length after convolution.
 class Chomp1d(nn.Module):
@@ -23,9 +27,24 @@ class GatingNet(nn.Module):
         self.g3 = nn.Linear(gating_hidden, num_experts)
         self.dropout = dropout
         self.temperature = temperature
+        fab_mean = [2.377953463,	1.849263019, 1.60007859, 1.757481385,	2.888998,	1.900023537,	3.556215491,	2.612263944,	1.895851205,	4.202264476,
+        24.57707941,	35.45750622,	30.4602287,	28.32753799,	20.19461924,	30.86888558,	15.07308212,	21.87154258,	22.54799156,	47.56942489,
+        -0.3509646938,	0.3130965961,	0.8534762274,	-1.408647667,	0.1639256654,	0.6967448767,	-0.4100150165,	-0.1157595488,	0.3081485786,	-0.459047836  ]
+        
+        fab_std = [0.3903993294,	0.4026807299,	0.3789195593,	0.7364284741,	0.4014533982,	0.3851321317,	0.5857557042,	0.3110404101,	0.4520797378,	0.4512631504,
+        13.05412009,	20.90036521,	15.25565521,	16.41055256,	9.506750442,	13.3120746,	7.822642518,	10.1290902,	12.29267163,	23.88696694,
+        9.140419992,	9.249584712,	7.384249101,	10.3740144,	7.440053835,	11.04651876,	6.266527292,	7.450460056,	6.397610661,	5.641210812]
+
+
+        # Register as buffers so they move with .to(device) / .cuda()
+        self.register_buffer("fab_mean", torch.tensor(fab_mean, dtype=torch.float32))
+        self.register_buffer("fab_std", torch.tensor(fab_std, dtype=torch.float32))
 
     def forward(self, g):
         # g: (B, G)
+        # Normalize only features 21:50 (Python slicing is end-exclusive)
+        g[:, 20:50] = (g[:, 20:50] - self.fab_mean) / (self.fab_std + 1e-6)
+        
         g = F.dropout(g, self.dropout, training=self.training)
         g = F.elu(self.g1(g))
         g = F.dropout(g, self.dropout, training=self.training)

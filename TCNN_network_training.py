@@ -311,15 +311,15 @@ def main():
     log_wandB = True
     train_and_plot = True
     
-    file_name = "Predictor training Scherpeel Dataset - MANN_TCN_DynamicWeights(43,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2) - 1 Subject"
+    file_name = "Predictor training Scherpeel Dataset - 5 Subject - MANN_TCN_DynamicWeights(43,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2)"
     project_name = "ICRA 2026"
     
     # Config the configurations
     config = {
         "training_tag": file_name,
         "project_name": project_name,
-        "epochs": 5,
-        "batch_size": 32,
+        "epochs": 20,
+        "batch_size": 128,
         "num_workers": 8,
         "momentum":0.9,
         "lr": 1e-4,
@@ -340,7 +340,7 @@ def main():
         wandb.init( project=project_name, name= config["training_tag"], config=config)
     
     # Data setup
-    data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/AB01_req_sim_data.csv"
+    data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/five_subjects_req_sim_data.csv"
     PAE_model_file = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20250829_0213_PAE training Scherpeel Dataset - 10 Subjects 10 Phases - 25 epochs.pth"
     df = pd.read_csv(data_path)
     
@@ -375,10 +375,10 @@ def main():
     val_sampler = GroupedBatchSampler(val_ds, batch_size=config["batch_size"], shuffle=False, drop_last=False)
     val_loader  = DataLoader(val_ds, batch_sampler=val_sampler, num_workers=8, pin_memory=True)
     
-    train_sampler_plot = GroupedBatchSampler(train_ds, batch_size=32, shuffle=False, drop_last=False)
+    train_sampler_plot = GroupedBatchSampler(train_ds, batch_size=64, shuffle=False, drop_last=False)
     train_loader_plot  = DataLoader(train_ds, batch_sampler=train_sampler_plot, num_workers=8, pin_memory=True)
     
-    val_sampler_plot = GroupedBatchSampler(val_ds, batch_size=32, shuffle=False, drop_last=False)
+    val_sampler_plot = GroupedBatchSampler(val_ds, batch_size=64, shuffle=False, drop_last=False)
     val_loader_plot  = DataLoader(val_ds, batch_sampler=val_sampler_plot, num_workers=8, pin_memory=True)
     
 
@@ -430,8 +430,8 @@ def main():
         model.load_state_dict(weights)
 
 
-    plot_results(train_loader_plot, PAE_model, model, cols_2_get[43:63])
-    plot_results(val_loader_plot, PAE_model, model, cols_2_get[43:63])
+    # plot_results(train_loader_plot, PAE_model, model, cols_2_get[43:63])
+    # plot_results(val_loader_plot, PAE_model, model, cols_2_get[43:63])
 
 
 
