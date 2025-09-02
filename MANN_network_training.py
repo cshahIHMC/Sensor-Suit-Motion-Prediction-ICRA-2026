@@ -16,6 +16,7 @@ from Models import PAE
 import torch
 import torch.nn as nn
 from datetime import datetime
+import csv
 
 
 def col_2_extract():
@@ -67,8 +68,6 @@ def calc_val_loss(model, PAE_model, validation_dataloader, lossFn, lossFn_no_red
                         
             # Predict
             _, _, _, params  = PAE_model(PAE_inputs)
-            
-            flattened_inputs = utility.ToDevice(FCNN_inputs.reshape(FCNN_inputs.shape[0], -1))
 
             params_cat = torch.cat(params, dim=2)
             # phaseInputs = params_cat.reshape(params_cat.shape[0], -1)
@@ -80,6 +79,12 @@ def calc_val_loss(model, PAE_model, validation_dataloader, lossFn, lossFn_no_red
             phaseInputs = phaseInputs.reshape(phaseInputs.shape[0], -1)
             
             # FCNN_combine_inputs = torch.cat((flattened_inputs, phaseInputs), dim=1)
+            
+            flattened_inputs = utility.ToDevice(FCNN_inputs.reshape(FCNN_inputs.shape[0], -1))
+            
+            # Only using the last time step to predict the future time step
+            last_step_inputs = FCNN_inputs[:, :, -20:]              # shape = [batch, features]
+            flattened_inputs = utility.ToDevice(last_step_inputs.reshape(last_step_inputs.shape[0], -1)) # already flat
             
             
             # MANN
@@ -163,7 +168,11 @@ def train_model(model, config, training_dataloader, validation_dataloader, PAE_m
             phaseInputs = phaseInputs.reshape(phaseInputs.shape[0], -1)
             
             # Flattening the inputs for the motion prediction network
-            flattened_inputs = utility.ToDevice(FCNN_inputs.reshape(FCNN_inputs.shape[0], -1))
+            # flattened_inputs = utility.ToDevice(FCNN_inputs.reshape(FCNN_inputs.shape[0], -1))
+            
+            # Only using the last time step to predict the future time step
+            last_step_inputs = FCNN_inputs[:, :, -20:]              # shape = [batch, features]
+            flattened_inputs = utility.ToDevice(last_step_inputs.reshape(last_step_inputs.shape[0], -1)) # already flat
             
             # FCNN_combine_inputs = torch.cat((flattened_inputs, phaseInputs), dim=1)
             
@@ -213,8 +222,16 @@ def train_model(model, config, training_dataloader, validation_dataloader, PAE_m
 def plot_results(dataloader, PAE_model, model, col_names, plot_save_name=None):
     model.eval()
     
+    # save_csv_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/params_normalization.csv"
+    
     ground_truth = []
     preds = []
+    
+    # total = 0
+    # sums = None
+    # sums_sq = None
+    # colnames = None
+    # phase_channels = None
     
     with torch.no_grad():
         for batch in dataloader:
@@ -229,8 +246,53 @@ def plot_results(dataloader, PAE_model, model, col_names, plot_save_name=None):
             PAE_model.eval()
             _, _, _, params  = PAE_model(PAE_inputs)
             
-            # Flattening the inputs for the motion prediction network
-            flattened_inputs = utility.ToDevice(FCNN_inputs.reshape(FCNN_inputs.shape[0], -1))
+            
+        #     ## saving Params and calculating their stats
+        #     p = params[0].squeeze(-1)   # [B, C]
+        #     f = params[1].squeeze(-1)   # [B, C]
+        #     a = params[2].squeeze(-1)   # [B, C]
+        #     b = params[3].squeeze(-1)   # [B, C]
+           
+        #     # Build [B, C, 4] -> [B, C*4]
+        #     feats = torch.stack([p, f, a, b], dim=-1).reshape(p.shape[0], -1)
+        #     F = feats.to("cpu", dtype=torch.float64).numpy()  # [B,D]
+        #     B, D = F.shape
+
+        #     if sums is None:
+        #         sums = np.zeros(D, dtype=np.float64)
+        #         sums_sq = np.zeros(D, dtype=np.float64)
+
+        #     sums += F.sum(axis=0)
+        #     sums_sq += (F * F).sum(axis=0)
+        #     total += B
+
+        # eps = 1e-12
+        # means = sums / max(total, 1)
+        # vars_ = sums_sq / max(total, 1) - means**2
+        # vars_ = np.maximum(vars_, 0.0)
+        # stds = np.sqrt(vars_ + eps)
+        
+        # tags = ["p", "f", "a", "b"]
+        
+        # D = means.shape[0]  # = C*4
+        # C = D // 4
+
+        # means_mat = means.reshape(C, 4)   # [C,4] each col = one of p,f,a,b
+        # stds_mat  = stds.reshape(C, 4)
+
+        # with open(save_csv_path, "w", newline="") as f:
+        #     w = csv.writer(f)
+        #     header = ["stat"] + [f"c{c}" for c in range(C)]
+        #     w.writerow(header)
+
+        #     for i, tag in enumerate(tags):
+        #         w.writerow([f"{tag}_mean"] + [f"{v:.10g}" for v in means_mat[:, i]])
+        #     for i, tag in enumerate(tags):
+        #         w.writerow([f"{tag}_std"] + [f"{v:.10g}" for v in stds_mat[:, i]])
+    
+            
+   
+
 
             params_cat = torch.cat(params, dim=2)
             # phaseInputs = params_cat.reshape(params_cat.shape[0], -1)
@@ -243,6 +305,14 @@ def plot_results(dataloader, PAE_model, model, col_names, plot_save_name=None):
             
             # FCNN_combine_inputs = torch.cat((flattened_inputs, phaseInputs), dim=1)
             # FCNN_combine_inputs = flattened_inputs
+            
+            # Flattening the inputs for the motion prediction network
+            flattened_inputs = utility.ToDevice(FCNN_inputs.reshape(FCNN_inputs.shape[0], -1))
+            
+            # Only using the last time step to predict the future time step
+            last_step_inputs = FCNN_inputs[:, :, -20:]              # shape = [batch, features]
+            flattened_inputs = utility.ToDevice(last_step_inputs.reshape(last_step_inputs.shape[0], -1)) # already flat
+            
             
              # MANN
             y_pred, _ = model(phaseInputs, flattened_inputs)
@@ -339,15 +409,15 @@ def main():
     log_wandB = True
     train_and_plot = True
     
-    file_name = "Predictor training Scherpeel Dataset - All subjects MANN-Model(50,256,10,inputs,512,20, 0.3)"
+    file_name = "Predictor training Scherpeel Dataset (last 20 time steps)- 5 Subjects MANN-Model(50,256,10,inputs,512,20, 0.3)"
     project_name = "ICRA 2026"
     
     # Config the configurations
     config = {
         "training_tag": file_name,
         "project_name": project_name,
-        "epochs": 30,
-        "batch_size": 32,
+        "epochs": 20,
+        "batch_size": 64,
         "num_workers": 8,
         "momentum":0.9,
         "lr": 1e-4,
@@ -368,7 +438,7 @@ def main():
         wandb.init( project=project_name, name= config["training_tag"], config=config)
     
     # Data setup
-    data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/all_subjects_req_sim_data.csv"
+    data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/five_subjects_req_sim_data.csv"
     PAE_model_file = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20250829_0213_PAE training Scherpeel Dataset - 10 Subjects 10 Phases - 25 epochs.pth"
     df = pd.read_csv(data_path)
     
@@ -403,10 +473,10 @@ def main():
     val_sampler = GroupedBatchSampler(val_ds, batch_size=config["batch_size"], shuffle=False, drop_last=False)
     val_loader  = DataLoader(val_ds, batch_sampler=val_sampler, num_workers=8, pin_memory=True)
     
-    train_sampler_plot = GroupedBatchSampler(train_ds, batch_size=32, shuffle=False, drop_last=False)
+    train_sampler_plot = GroupedBatchSampler(train_ds, batch_size=64, shuffle=False, drop_last=False)
     train_loader_plot  = DataLoader(train_ds, batch_sampler=train_sampler_plot, num_workers=8, pin_memory=True)
     
-    val_sampler_plot = GroupedBatchSampler(val_ds, batch_size=32, shuffle=False, drop_last=False)
+    val_sampler_plot = GroupedBatchSampler(val_ds, batch_size=64, shuffle=False, drop_last=False)
     val_loader_plot  = DataLoader(val_ds, batch_sampler=val_sampler_plot, num_workers=8, pin_memory=True)
     
 
@@ -426,8 +496,8 @@ def main():
     PAE_model.load_state_dict(weights)
     
     # FCNN_inputs = config["FCNN_inputs"] * config["FCNN_seq_length"] + 4 * config["PAE_phases"]
-    inputs = config["inputs"] * config["seq_length"]
-    
+    # inputs = config["inputs"] * config["seq_length"]
+    inputs = config["inputs"] * 20
     
     if train_and_plot:
         
@@ -438,6 +508,7 @@ def main():
         #                         config["hidden_neurons"],
         #                         config["dropout"]))
         
+        # model = utility.ToDevice(Model(50,256,10,inputs,512,20, 0.3))
         model = utility.ToDevice(Model(50,256,10,inputs,512,20, 0.3))
 
         # Train
@@ -453,7 +524,7 @@ def main():
     
     else:
         # model_location = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20250829_1431_Predictor training Scherpeel Dataset - FCNN.pth"
-        model_location = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20250829_1550_Predictor training Scherpeel Dataset - MANN-Model(50,256,10,inputs,512,20, 0.3).pth"
+        model_location = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20250831_1654_Predictor training Scherpeel Dataset - All subjects MANN-Model(50,256,10,inputs,512,20, 0.3).pth"
         weights = torch.load(model_location, weights_only=True)
         # model = utility.ToDevice(FCNN(inputs, 
         #                     config["outputs"], 

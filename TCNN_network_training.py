@@ -308,8 +308,8 @@ def main():
     
     # Different Flags
     # Logging False
-    log_wandB = True
-    train_and_plot = True
+    log_wandB = False
+    train_and_plot = False
     
     file_name = "Predictor training Scherpeel Dataset - 5 Subject - MANN_TCN_DynamicWeights(43,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2)"
     project_name = "ICRA 2026"
@@ -422,7 +422,7 @@ def main():
     
     else:
         
-        model_location = ""
+        model_location = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20250902_1027_Predictor training Scherpeel Dataset - 5 Subject - MANN_TCN_DynamicWeights(43,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2).pth"
         weights = torch.load(model_location, weights_only=True)
         # model = utility.ToDevice(TCNModel(43,20,[64, 128, 128, 128, 256],2,0.2))
         # MoE style TCNN
@@ -430,8 +430,8 @@ def main():
         model.load_state_dict(weights)
 
 
-    # plot_results(train_loader_plot, PAE_model, model, cols_2_get[43:63])
-    # plot_results(val_loader_plot, PAE_model, model, cols_2_get[43:63])
+    plot_results(train_loader_plot, PAE_model, model, cols_2_get[43:63])
+    plot_results(val_loader_plot, PAE_model, model, cols_2_get[43:63])
 
 
 

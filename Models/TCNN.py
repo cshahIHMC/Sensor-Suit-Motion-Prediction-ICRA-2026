@@ -98,3 +98,22 @@ class TCNModel(nn.Module):
         # out shape: (batch_size, output_size)
  
         return out
+
+class TCNModel_Forecast(nn.Module):
+    def __init__(self, input_size, output_size, horizon, num_channels, kernel_size=2, dropout=0.2):
+        super(TCNModel, self).__init__()
+        # Define the TCN part of the model.
+        self.tcn = TemporalConvNet(input_size, num_channels, kernel_size, dropout)
+        # Linear layer to produce the final output.
+        self.horizon = horizon
+        self.linear = nn.Linear(num_channels[-1], output_size * horizon)
+
+    def forward(self, x):
+        """
+        x: [B, C_in, T_in]
+        returns: [B, H, C_out]   # forecasts for next H steps
+        """
+        y = self.tcn(x)               # [B, C_hidden, T_in]
+        last = y[:, :, -1]            # [B, C_hidden]
+        out = self.proj(last)         # [B, H*C_out]
+        return out.view(x.size(0), self.horizon, -1)
