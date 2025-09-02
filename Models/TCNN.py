@@ -101,11 +101,12 @@ class TCNModel(nn.Module):
 
 class TCNModel_Forecast(nn.Module):
     def __init__(self, input_size, output_size, horizon, num_channels, kernel_size=2, dropout=0.2):
-        super(TCNModel, self).__init__()
+        super(TCNModel_Forecast, self).__init__()
         # Define the TCN part of the model.
         self.tcn = TemporalConvNet(input_size, num_channels, kernel_size, dropout)
         # Linear layer to produce the final output.
         self.horizon = horizon
+        self.output_size = output_size
         self.linear = nn.Linear(num_channels[-1], output_size * horizon)
 
     def forward(self, x):
@@ -115,5 +116,9 @@ class TCNModel_Forecast(nn.Module):
         """
         y = self.tcn(x)               # [B, C_hidden, T_in]
         last = y[:, :, -1]            # [B, C_hidden]
-        out = self.proj(last)         # [B, H*C_out]
-        return out.view(x.size(0), self.horizon, -1)
+        out = self.linear(last)         # [B, H*C_out]
+        out = out.view(x.size(0), self.horizon, self.output_size) \
+                 .transpose(1, 2) \
+                 .contiguous() 
+                 
+        return out
