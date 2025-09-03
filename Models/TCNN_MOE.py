@@ -324,6 +324,49 @@ class MANN_TCN_DynamicWeights(nn.Module):
         
         return out
 
+class MANN_TCN_DynamicWeights_Forecast(nn.Module):
+    """
+    End-to-end: GatingNet -> per-sample expert weights -> Expert TCN (all convs mixed)
+    This exactly matches: "gating network dynamically changes the weights of the TCN".
+    """
+    def __init__(self,
+                 input_size: int,
+                 output_size: int,
+                 horizon: int,
+                 num_experts: int,
+                 tcn_channels,                # e.g., [64,128,128,256]
+                 gating_input: int,
+                 gating_hidden: int = 128,
+                 kernel_size: int = 2,
+                 tcn_dropout: float = 0.2,
+                 gating_dropout: float = 0.0,
+                 temperature: float = 1.0):
+        super().__init__()
+        self.gate = GatingNet(gating_input, gating_hidden, num_experts, dropout=gating_dropout, temperature=temperature)
+        self.tcn = ExpertTemporalConvNet(num_experts, input_size, tcn_channels, kernel_size=kernel_size, dropout=tcn_dropout)
+        self.horizon = horizon
+        self.output_size = output_size
+        
+        self.linear = nn.Linear(tcn_channels[-1], output_size * horizon)
+
+    def forward(self, phaseinputs: torch.Tensor, seq_input: torch.Tensor):
+        # phaseinputs: (B, G), seq_input: (B, C_in, T)
+        w = self.gate(phaseinputs)           # (B, E)
+        feats_t = self.tcn(seq_input, w)             # (B, C_last, T)
+        last = feats_t[:, :, -1]
+        out = self.linear(last)         # [B, H*C_out]
+        out = out.view(seq_input.size(0), self.horizon, self.output_size) \
+                 .transpose(1, 2) \
+                 .contiguous() 
+        # return {
+        #     'pred': out,
+        #     'weights': w,
+        #     'logits': logits,
+        #     'feats': feats,
+        # }
+        
+        return out
+    
 # Note on efficiency:
 # The ExpertConv1d above blends kernels per sample and then performs a per-sample conv.
 # This is simple and correct. For large batches, you can micro-batch or move to a grouped-conv

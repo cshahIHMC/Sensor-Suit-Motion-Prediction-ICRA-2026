@@ -13,7 +13,7 @@ from torch.utils.data import Dataset, DataLoader, Subset
 from Models.FCNN import FCNN
 from Models.MANN import Model
 from Models.TCNN import TCNModel, TCNModel_Forecast
-from Models.TCNN_MOE import MANN_TCN_DynamicWeights
+from Models.TCNN_MOE import MANN_TCN_DynamicWeights, MANN_TCN_DynamicWeights_Forecast
 from Models import PAE
 from itertools import islice
 import torch
@@ -66,29 +66,29 @@ def calc_val_loss(model, PAE_model, validation_dataloader, lossFn, lossFn_no_red
         for batch in validation_dataloader:
             
             PAE_inputs, FCNN_inputs, FCNN_outputs = batch
-            # PAE_inputs = utility.ToDevice(PAE_inputs)
+            PAE_inputs = utility.ToDevice(PAE_inputs)
                         
             # # Predict
-            # _, _, _, params  = PAE_model(PAE_inputs)
+            _, _, _, params  = PAE_model(PAE_inputs)
             
-            # # flattened_inputs = utility.ToDevice(FCNN_inputs.reshape(FCNN_inputs.shape[0], -1))
+            # flattened_inputs = utility.ToDevice(FCNN_inputs.reshape(FCNN_inputs.shape[0], -1))
 
-            # params_cat = torch.cat(params, dim=2)
-            # phaseInputs = params_cat.reshape(params_cat.shape[0], -1)
-            # phase_sin_x = torch.sin(2 * np.pi * params_cat[...,0])
-            # phase_cos_x = torch.cos(2 * np.pi * params_cat[...,0])
+            params_cat = torch.cat(params, dim=2)
+            phaseInputs = params_cat.reshape(params_cat.shape[0], -1)
+            phase_sin_x = torch.sin(2 * np.pi * params_cat[...,0])
+            phase_cos_x = torch.cos(2 * np.pi * params_cat[...,0])
             
-            # phaseInputs = torch.stack([phase_sin_x, phase_cos_x, params_cat[...,1], params_cat[...,2], params_cat[...,3]], dim=2) 
-            # phaseInputs = phaseInputs.reshape(phaseInputs.shape[0], -1)
+            phaseInputs = torch.stack([phase_sin_x, phase_cos_x, params_cat[...,1], params_cat[...,2], params_cat[...,3]], dim=2) 
+            phaseInputs = phaseInputs.reshape(phaseInputs.shape[0], -1)
             
             # TCNN 1 time step prediction
             # y_pred = model(utility.ToDevice(FCNN_inputs))
             
             # TCNN future forecasting
-            y_pred = model(utility.ToDevice(FCNN_inputs))
+            # y_pred = model(utility.ToDevice(FCNN_inputs))
             
             # TCNN_MOE
-            # y_pred = model(phaseInputs, utility.ToDevice(FCNN_inputs))
+            y_pred = model(phaseInputs, utility.ToDevice(FCNN_inputs))
             
             # Calculate the loss
             loss = lossFn(y_pred,utility.ToDevice(FCNN_outputs.squeeze(-1)))
@@ -146,28 +146,28 @@ def train_model(model, config, training_dataloader, validation_dataloader, PAE_m
         
             PAE_inputs, FCNN_inputs, FCNN_outputs = batch
             
-            # PAE_inputs = utility.ToDevice(PAE_inputs)
+            PAE_inputs = utility.ToDevice(PAE_inputs)
             
-            # PAE_model.eval()
-            # _, _, _, params  = PAE_model(PAE_inputs)
+            PAE_model.eval()
+            _, _, _, params  = PAE_model(PAE_inputs)
             
-            # params_cat = torch.cat(params, dim=2)
-            # phaseInputs = params_cat.reshape(params_cat.shape[0], -1)
-            # phase_sin_x = torch.sin(2 * np.pi * params_cat[...,0])
-            # phase_cos_x = torch.cos(2 * np.pi * params_cat[...,0])
-            # phaseInputs = torch.stack([phase_sin_x, phase_cos_x, params_cat[...,1], params_cat[...,2], params_cat[...,3]], dim=2) 
-            # phaseInputs = phaseInputs.reshape(phaseInputs.shape[0], -1)
+            params_cat = torch.cat(params, dim=2)
+            phaseInputs = params_cat.reshape(params_cat.shape[0], -1)
+            phase_sin_x = torch.sin(2 * np.pi * params_cat[...,0])
+            phase_cos_x = torch.cos(2 * np.pi * params_cat[...,0])
+            phaseInputs = torch.stack([phase_sin_x, phase_cos_x, params_cat[...,1], params_cat[...,2], params_cat[...,3]], dim=2) 
+            phaseInputs = phaseInputs.reshape(phaseInputs.shape[0], -1)
             
             
             # TCNN Prediction
             # y_pred = model(utility.ToDevice(FCNN_inputs))
             
             # TCNN Forecasting
-            y_pred = model(utility.ToDevice(FCNN_inputs))
+            # y_pred = model(utility.ToDevice(FCNN_inputs))
             
             # TCNN_MOE
-            # y_pred = model(phaseInputs, utility.ToDevice(FCNN_inputs))
-            
+            y_pred = model(phaseInputs, utility.ToDevice(FCNN_inputs))
+
             # Calculate the loss
             loss = lossFn(y_pred, utility.ToDevice(FCNN_outputs.squeeze(-1)))
 
@@ -202,7 +202,7 @@ def train_model(model, config, training_dataloader, validation_dataloader, PAE_m
 def results(dataloader, PAE_model, model, col_names, plot_save_name=None):
     
     stats_calc(dataloader, PAE_model, model, col_names)
-    plot_results((dataloader, PAE_model, model, col_names))
+    plot_results(dataloader, PAE_model, model, col_names)
 
 
 def plot_results(dataloader, PAE_model, model, col_names, plot_save_name=None):
@@ -215,15 +215,26 @@ def plot_results(dataloader, PAE_model, model, col_names, plot_save_name=None):
     axs2_flat = axs2.flatten()
     
     step = 5
-    end_plot_timestep = 10
+    end_plot_timestep = 100
     
     with torch.no_grad():
         for j, batch in enumerate(dataloader):
                
             PAE_inputs, FCNN_inputs, FCNN_outputs = batch
+            PAE_inputs = utility.ToDevice(PAE_inputs)
             
-            # TCNN future forecastor
-            y_pred = model(utility.ToDevice(FCNN_inputs))
+            PAE_model.eval()
+            _, _, _, params  = PAE_model(PAE_inputs)
+            
+            params_cat = torch.cat(params, dim=2)
+            phaseInputs = params_cat.reshape(params_cat.shape[0], -1)
+            phase_sin_x = torch.sin(2 * np.pi * params_cat[...,0])
+            phase_cos_x = torch.cos(2 * np.pi * params_cat[...,0])
+            phaseInputs = torch.stack([phase_sin_x, phase_cos_x, params_cat[...,1], params_cat[...,2], params_cat[...,3]], dim=2) 
+            phaseInputs = phaseInputs.reshape(phaseInputs.shape[0], -1)
+            
+            # TCNN_MOE
+            y_pred = model(phaseInputs, utility.ToDevice(FCNN_inputs))
             
             pred_np = utility.Item(y_pred).numpy()
             ground_truth_np = FCNN_outputs.numpy()
@@ -240,10 +251,12 @@ def plot_results(dataloader, PAE_model, model, col_names, plot_save_name=None):
                     
                     axs1_flat[k].plot(dataloader.dataset.indices[start_index:end_index], pred_np[i,k,:], linewidth=1, alpha=1.0, color="red", label="Pred")
                     axs1_flat[k].plot(dataloader.dataset.indices[start_index:end_index], ground_truth_np[i,k,:], linewidth=1, alpha=0.75, color="black", label="Ground Truth")
+                    axs1_flat[k].set_title(col_names[k])
                     
                     axs2_flat[k].plot(dataloader.dataset.indices[start_index:end_index], pred_np[i,k+10,:], linewidth=1, alpha=1.0, color="red", label="Pred")
                     axs2_flat[k].plot(dataloader.dataset.indices[start_index:end_index], ground_truth_np[i,k+10,:], linewidth=1, alpha=0.75, color="black", label="Ground Truth")
-            
+                    axs2_flat[k].set_title(col_names[k+10])
+                    
             if j == end_plot_timestep:
                 break
                          
@@ -265,31 +278,31 @@ def stats_calc(dataloader, PAE_model, model, col_names,
             # print("FNN inputs last slice ", FCNN_inputs[-1,:,-1])
             # print("FNN outputs:", FCNN_outputs[-1,:])
             
-            # PAE_inputs = utility.ToDevice(PAE_inputs)
+            PAE_inputs = utility.ToDevice(PAE_inputs)
             
-            # PAE_model.eval()
-            # _, _, _, params  = PAE_model(PAE_inputs)
+            PAE_model.eval()
+            _, _, _, params  = PAE_model(PAE_inputs)
             
-            # # # Flattening the inputs for the motion prediction network
-            # # flattened_inputs = utility.ToDevice(FCNN_inputs.reshape(FCNN_inputs.shape[0], -1))
+            # # Flattening the inputs for the motion prediction network
+            # flattened_inputs = utility.ToDevice(FCNN_inputs.reshape(FCNN_inputs.shape[0], -1))
 
-            # params_cat = torch.cat(params, dim=2)
-            # # phaseInputs = params_cat.reshape(params_cat.shape[0], -1)
-            # phase_sin_x = torch.sin(2 * np.pi * params_cat[...,0])
-            # phase_cos_x = torch.cos(2 * np.pi * params_cat[...,0])
+            params_cat = torch.cat(params, dim=2)
+            # phaseInputs = params_cat.reshape(params_cat.shape[0], -1)
+            phase_sin_x = torch.sin(2 * np.pi * params_cat[...,0])
+            phase_cos_x = torch.cos(2 * np.pi * params_cat[...,0])
             
-            # phaseInputs = torch.stack([phase_sin_x, phase_cos_x, params_cat[...,1], params_cat[...,2], params_cat[...,3]], dim=2) 
-            # phaseInputs = phaseInputs.reshape(phaseInputs.shape[0], -1)
+            phaseInputs = torch.stack([phase_sin_x, phase_cos_x, params_cat[...,1], params_cat[...,2], params_cat[...,3]], dim=2) 
+            phaseInputs = phaseInputs.reshape(phaseInputs.shape[0], -1)
             
             
             # TCNN 1 Step prediction
             # y_pred = model(utility.ToDevice(FCNN_inputs))
             
             # TCNN future forecastor
-            y_pred = model(utility.ToDevice(FCNN_inputs))
+            # y_pred = model(utility.ToDevice(FCNN_inputs))
             
             # TCNN MOE
-            # y_pred = model(phaseInputs, utility.ToDevice(FCNN_inputs))
+            y_pred = model(phaseInputs, utility.ToDevice(FCNN_inputs))
 
             output_np = FCNN_outputs.numpy()
             pred_np = utility.Item(y_pred).numpy()
@@ -341,14 +354,14 @@ def main():
     log_wandB = True
     train_and_plot = True
     
-    file_name = "Predictor training Scherpeel Dataset - 1 Subject - TCNModel_Forecast(43,20,20,[64, 128, 128, 256, 64],2,0.2)"
+    file_name = "Predictor training Scherpeel Dataset - 5 Subject - 20 step forecast - MANN_TCN_DynamicWeights_Forecast(43,20,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2)"
     project_name = "ICRA 2026"
     
     # Config the configurations
     config = {
         "training_tag": file_name,
         "project_name": project_name,
-        "epochs": 25,
+        "epochs": 5,
         "batch_size": 128,
         "num_workers": 8,
         "momentum":0.9,
@@ -442,10 +455,11 @@ def main():
         # model = utility.ToDevice(TCNModel(43,20,[64, 128, 128, 256, 64],2,0.2))
         
         # Forecasting TCNN
-        model = utility.ToDevice(TCNModel_Forecast(43,20,20,[64, 128, 128, 256, 64],2,0.2))
+        # model = utility.ToDevice(TCNModel_Forecast(43,20,20,[64, 128, 128, 256, 64],2,0.2))
         
         # MoE style TCNN
         # model =utility.ToDevice(MANN_TCN_DynamicWeights(43,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2))
+        model =utility.ToDevice(MANN_TCN_DynamicWeights_Forecast(43,20,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2))
 
         # Train
         training_losses, validation_losses = train_model(model=model, config=config, training_dataloader=train_loader, 
@@ -460,17 +474,17 @@ def main():
     
     else:
         
-        model_location = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20250902_1656_Predictor training Scherpeel Dataset - 1 Subject - TCNModel_Forecast(43,20,10,[64, 128, 128, 256, 64],2,0.2).pth"
+        model_location = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20250903_1305_Predictor training Scherpeel Dataset - 1 Subject - 20 step forecast - MANN_TCN_DynamicWeights_Forecast(43,20,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2).pth"
         weights = torch.load(model_location, weights_only=True)
         # model = utility.ToDevice(TCNModel(43,20,[64, 128, 128, 128, 256],2,0.2))
         # Forecasting TCNN
-        model = utility.ToDevice(TCNModel_Forecast(43,20,20,[64, 128, 128, 256, 64],2,0.2))
+        # model = utility.ToDevice(TCNModel_Forecast(43,20,20,[64, 128, 128, 256, 64],2,0.2))
         # MoE style TCNN
-        # model =utility.ToDevice(MANN_TCN_DynamicWeights(43,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2))
+        model = utility.ToDevice(MANN_TCN_DynamicWeights_Forecast(43,20,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2))
         model.load_state_dict(weights)
 
 
-    results(train_loader_plot, PAE_model, model, cols_2_get[43:63])
+    # results(train_loader_plot, PAE_model, model, cols_2_get[43:63])
     results(val_loader_plot, PAE_model, model, cols_2_get[43:63])
 
 
