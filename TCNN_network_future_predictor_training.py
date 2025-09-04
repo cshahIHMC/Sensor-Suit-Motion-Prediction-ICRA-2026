@@ -13,7 +13,7 @@ from torch.utils.data import Dataset, DataLoader, Subset
 from Models.FCNN import FCNN
 from Models.MANN import Model
 from Models.TCNN import TCNModel, TCNModel_Forecast
-from Models.TCNN_MOE import MANN_TCN_DynamicWeights, MANN_TCN_DynamicWeights_Forecast
+from Models.TCNN_MOE import MANN_TCN_DynamicWeights, MANN_TCN_DynamicWeights_Forecast, MANN_TCN_DynamicWeights_Forecast_k
 from Models import PAE
 from itertools import islice
 import torch
@@ -87,11 +87,19 @@ def calc_val_loss(model, PAE_model, validation_dataloader, lossFn, lossFn_no_red
             # TCNN future forecasting
             # y_pred = model(utility.ToDevice(FCNN_inputs))
             
+            FCNN_inputs = utility.ToDevice(FCNN_inputs)
+            B = FCNN_inputs.size(0)
+            H = model.horizon
+            
+            k = torch.randint(1, H+1, (1,), device=FCNN_inputs.device) 
+            
             # TCNN_MOE
-            y_pred = model(phaseInputs, utility.ToDevice(FCNN_inputs))
+            y_pred = model(phaseInputs, FCNN_inputs, k)
+            
+            FCNN_outputs = utility.ToDevice(FCNN_outputs[:,:,0:k])
             
             # Calculate the loss
-            loss = lossFn(y_pred,utility.ToDevice(FCNN_outputs.squeeze(-1)))
+            loss = lossFn(y_pred,FCNN_outputs)
 
             
             # Calculate running loss
@@ -165,11 +173,22 @@ def train_model(model, config, training_dataloader, validation_dataloader, PAE_m
             # TCNN Forecasting
             # y_pred = model(utility.ToDevice(FCNN_inputs))
             
+            FCNN_inputs = utility.ToDevice(FCNN_inputs)
+            B = FCNN_inputs.size(0)
+            H = model.horizon
+            
+            k = torch.randint(1, H+1, (1,), device=FCNN_inputs.device) 
+            
+            
+            
             # TCNN_MOE
-            y_pred = model(phaseInputs, utility.ToDevice(FCNN_inputs))
-
+            y_pred = model(phaseInputs, FCNN_inputs, k)
+            
+            # Target 
+            FCNN_outputs = utility.ToDevice(FCNN_outputs[:,:,0:k])
+             
             # Calculate the loss
-            loss = lossFn(y_pred, utility.ToDevice(FCNN_outputs.squeeze(-1)))
+            loss = lossFn(y_pred, FCNN_outputs)
 
             # # Zero the parameter gradients
             optimizer.zero_grad()
@@ -178,6 +197,7 @@ def train_model(model, config, training_dataloader, validation_dataloader, PAE_m
             
             # Print statistics
             running_loss += loss.item() * FCNN_inputs.size(0)
+
 
                 
         train_loss = running_loss / len(training_dataloader.dataset)
@@ -202,7 +222,7 @@ def train_model(model, config, training_dataloader, validation_dataloader, PAE_m
 def results(dataloader, PAE_model, model, col_names, plot_save_name=None):
     
     stats_calc(dataloader, PAE_model, model, col_names)
-    plot_results(dataloader, PAE_model, model, col_names)
+    # plot_results(dataloader, PAE_model, model, col_names)
 
 
 def plot_results(dataloader, PAE_model, model, col_names, plot_save_name=None):
@@ -234,7 +254,7 @@ def plot_results(dataloader, PAE_model, model, col_names, plot_save_name=None):
             phaseInputs = phaseInputs.reshape(phaseInputs.shape[0], -1)
             
             # TCNN_MOE
-            y_pred = model(phaseInputs, utility.ToDevice(FCNN_inputs))
+            y_pred = model(phaseInputs, utility.ToDevice(FCNN_inputs),50)
             
             pred_np = utility.Item(y_pred).numpy()
             ground_truth_np = FCNN_outputs.numpy()
@@ -266,9 +286,20 @@ def plot_results(dataloader, PAE_model, model, col_names, plot_save_name=None):
 def stats_calc(dataloader, PAE_model, model, col_names,
                  plot_save_name=None):
     model.eval()
+    PAE_model.eval()
   
-    ground_truth = []
-    preds = []
+    # ground_truth = []
+    # preds = []
+    
+    device = next(model.parameters()).device
+    out_std = torch.as_tensor(dataloader.dataset.output_std, device=device, dtype=torch.float64)  # [F]
+
+    # Running accumulators (float64 for stability)
+    sum_abs   = torch.zeros_like(out_std, dtype=torch.float64)  # Σ |e|
+    sum_abs2  = torch.zeros_like(out_std, dtype=torch.float64)  # Σ |e|^2  (for std of abs error)
+    sum_sq    = torch.zeros_like(out_std, dtype=torch.float64)  # Σ e^2    (for RMSE)
+    count     = torch.tensor(0, dtype=torch.int64, device=device)  # total samples per feature
+
 
     with torch.no_grad():
         for batch in dataloader:
@@ -302,50 +333,41 @@ def stats_calc(dataloader, PAE_model, model, col_names,
             # y_pred = model(utility.ToDevice(FCNN_inputs))
             
             # TCNN MOE
-            y_pred = model(phaseInputs, utility.ToDevice(FCNN_inputs))
+            y_pred = model(phaseInputs, utility.ToDevice(FCNN_inputs), 50)
 
-            output_np = FCNN_outputs.numpy()
-            pred_np = utility.Item(y_pred).numpy()
+            # errors in ORIGINAL scale: (pred - gt) * std
+            # broadcast std over [B, F, T]
+            err = (y_pred - utility.ToDevice(FCNN_outputs)).to(dtype=torch.float64) * out_std.view(1, -1, 1)
 
-            preds.append(pred_np)
-            ground_truth.append(output_np)
-                  
+            abs_err = err.abs()                       # [B, F, T]
+            sq_err  = err.pow(2)                      # [B, F, T]
+            abs_err2 = abs_err.pow(2)
 
-    # Concatenate all batch outputs
-    pred_all = np.concatenate(preds, axis=0)        
-    ground_truth_all = np.concatenate(ground_truth, axis=0)  
-    
-    # print(pred_all.shape)
-    # print(ground_truth_all.shape)
-    
-    pred_all = pred_all.transpose(0,2,1).reshape(-1, pred_all.shape[1])
-    ground_truth_all = ground_truth_all.transpose(0,2,1).reshape(-1, ground_truth_all.shape[1])
-    
-    print("Flattened Shape", pred_all.shape)
-    
-    # Unnormalize the values
-    pred_all_unnormalized = pred_all * dataloader.dataset.output_std.to_numpy() + dataloader.dataset.output_mean.to_numpy()
-    ground_truth_all_unnormalized = ground_truth_all * dataloader.dataset.output_std.to_numpy() + dataloader.dataset.output_mean.to_numpy()
-    
-      # Joint Wise MAE
-    abs_errors = np.abs(pred_all_unnormalized - ground_truth_all_unnormalized) 
-    mae_per_joint_per_channel = abs_errors.mean(axis=0)  
-    
-    # Joint wise RMSE
-    squared_errors = (pred_all_unnormalized - ground_truth_all_unnormalized) ** 2
-    rmse_per_joint_per_channel = np.sqrt(squared_errors.mean(axis=0))
+            # reduce over batch & time -> per-feature vectors
+            reduce_dims = (0, 2)
+            sum_abs   += abs_err.sum(dim=reduce_dims)
+            sum_abs2  += abs_err2.sum(dim=reduce_dims)
+            sum_sq    += sq_err.sum(dim=reduce_dims)
+            count     += err.shape[0] * err.shape[2]  # B*T
 
-    
-    # Standard deviation over the samples (dim=0)
-    std_per_joint_per_channel = abs_errors.std(axis=0)
-    
-    
-    joints = col_names 
+    # finalize metrics
+    count_f = count.to(torch.float64).clamp_min(1)
+    mae  = (sum_abs / count_f)                                 # per-feature
+    rmse = torch.sqrt(sum_sq / count_f)                         # per-feature
+    # std of absolute error (like np.std(|e|))
+    mean_abs = mae
+    var_abs  = (sum_abs2 / count_f) - mean_abs.pow(2)
+    var_abs  = torch.clamp(var_abs, min=0.0)
+    std_abs  = torch.sqrt(var_abs)
 
-    # Print results
-    for joint_idx, joint in enumerate(joints):
-        print(f"Joint {joint} MAE = {mae_per_joint_per_channel[joint_idx]:.4f}, STD = {std_per_joint_per_channel[joint_idx]:.4f}, RMSE = {rmse_per_joint_per_channel[joint_idx]:.4f} ")
-        
+    # print nicely
+    mae_np  = mae.cpu().numpy()
+    std_np  = std_abs.cpu().numpy()
+    rmse_np = rmse.cpu().numpy()
+
+    print("Samples per feature (total N per feature):", int(count.item()))
+    for i, joint in enumerate(col_names):
+        print(f"Joint {joint} MAE = {mae_np[i]:.4f}, STD = {std_np[i]:.4f}, RMSE = {rmse_np[i]:.4f}")        
 
 def main():
     
@@ -354,21 +376,21 @@ def main():
     log_wandB = True
     train_and_plot = True
     
-    file_name = "Predictor training Scherpeel Dataset - 5 Subject - 20 step forecast - MANN_TCN_DynamicWeights_Forecast(43,20,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2)"
+    file_name = "Predictor training Scherpeel Dataset - 10 Subject - random forecast - MANN_TCN_DynamicWeights_Forecast_k(43,20,50,8,[32, 64, 64, 128, 32],50,256,3,0.2,0.2)"
     project_name = "ICRA 2026"
     
     # Config the configurations
     config = {
         "training_tag": file_name,
         "project_name": project_name,
-        "epochs": 5,
+        "epochs": 40,
         "batch_size": 128,
         "num_workers": 8,
         "momentum":0.9,
         "lr": 1e-4,
         "dataset": "IHMC Senorsuit",
         "seq_length": 201,
-        "pred_length":20,
+        "pred_length":100,
         "inputs": 43,
         "outputs": 20,
         "hidden_layers": 5,
@@ -384,8 +406,8 @@ def main():
         wandb.init( project=project_name, name= config["training_tag"], config=config)
     
     # Data setup
-    data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/five_subjects_req_sim_data.csv"
-    PAE_model_file = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20250829_0213_PAE training Scherpeel Dataset - 10 Subjects 10 Phases - 25 epochs.pth"
+    data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/all_subjects_req_sim_data.csv"
+    PAE_model_file = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20250904_1754_PAE training Scherpeel Dataset - 10 Subjects 10 Phases - 40 epochs.pth"
     df = pd.read_csv(data_path)
     
     print("Full df Shape: ", df.shape)
@@ -459,7 +481,8 @@ def main():
         
         # MoE style TCNN
         # model =utility.ToDevice(MANN_TCN_DynamicWeights(43,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2))
-        model =utility.ToDevice(MANN_TCN_DynamicWeights_Forecast(43,20,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2))
+        # model = utility.ToDevice(MANN_TCN_DynamicWeights_Forecast(43,20,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2))
+        model = utility.ToDevice(MANN_TCN_DynamicWeights_Forecast_k(43,20,100,8,[32, 64, 64, 128, 32],50,256,3,0.2,0.2))
 
         # Train
         training_losses, validation_losses = train_model(model=model, config=config, training_dataloader=train_loader, 
@@ -474,13 +497,20 @@ def main():
     
     else:
         
-        model_location = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20250903_1305_Predictor training Scherpeel Dataset - 1 Subject - 20 step forecast - MANN_TCN_DynamicWeights_Forecast(43,20,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2).pth"
+        model_location = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20250904_1822_Predictor training Scherpeel Dataset - 10 Subject - random forecast - MANN_TCN_DynamicWeights_Forecast_k(43,20,50,8,[32, 64, 64, 128, 32],50,256,3,0.2,0.2).pth"
         weights = torch.load(model_location, weights_only=True)
+        
         # model = utility.ToDevice(TCNModel(43,20,[64, 128, 128, 128, 256],2,0.2))
+        
         # Forecasting TCNN
         # model = utility.ToDevice(TCNModel_Forecast(43,20,20,[64, 128, 128, 256, 64],2,0.2))
+        
         # MoE style TCNN
-        model = utility.ToDevice(MANN_TCN_DynamicWeights_Forecast(43,20,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2))
+        # model =utility.ToDevice(MANN_TCN_DynamicWeights(43,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2))
+        # model = utility.ToDevice(MANN_TCN_DynamicWeights_Forecast(43,20,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2))
+        
+        model = utility.ToDevice(MANN_TCN_DynamicWeights_Forecast_k(43,20,100,8,[32, 64, 64, 128, 32],50,256,3,0.2,0.2))
+        
         model.load_state_dict(weights)
 
 

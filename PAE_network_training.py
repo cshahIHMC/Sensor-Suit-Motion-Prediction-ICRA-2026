@@ -28,6 +28,25 @@ def col_2_extract():
             "RShank_V_GYROX", "RShank_V_GYROY", "RShank_V_GYROZ",
             "LFoot_V_GYROX", "LFoot_V_GYROY", "LFoot_V_GYROZ",
             "RFoot_V_GYROX", "RFoot_V_GYROY", "RFoot_V_GYROZ",
+            
+            "Pelvis_V_ACCX", "Pelvis_V_ACCY", "Pelvis_V_ACCZ",
+            "LThigh_V_ACCX", "LThigh_V_ACCY", "LThigh_V_ACCZ",
+            "RThigh_V_ACCX", "RThigh_V_ACCY", "RThigh_V_ACCZ",
+            "LShank_V_ACCX", "LShank_V_ACCY", "LShank_V_ACCZ",
+            "RShank_V_ACCX", "RShank_V_ACCY", "RShank_V_ACCZ",
+            "LFoot_V_ACCX", "LFoot_V_ACCY", "LFoot_V_ACCZ",
+            "RFoot_V_ACCX", "RFoot_V_ACCY", "RFoot_V_ACCZ",
+            "weight",
+
+            "hip_flexion_r" ,"hip_adduction_r" ,"hip_rotation_r",
+            "knee_angle_r", "ankle_angle_r" ,
+            "hip_flexion_l", "hip_adduction_l", "hip_rotation_l",
+            "knee_angle_l", "ankle_angle_l",
+            "hip_flexion_velocity_r", "hip_adduction_velocity_r", "hip_rotation_velocity_r",
+            "knee_velocity_r", "ankle_velocity_r",
+            "hip_flexion_velocity_l", "hip_adduction_velocity_l", "hip_rotation_velocity_l",
+            "knee_velocity_l", "ankle_velocity_l",
+
             "subject", "condition"
             ]
     
@@ -47,9 +66,10 @@ def cal_validation_loss(model, validation_dataloader, lossFn, lossFn_no_reductio
     all_signals = []
     
     with torch.no_grad():
-        for batch, meta in validation_dataloader:
+        for batch in validation_dataloader:
             
-            PAE_inputs = utility.ToDevice(batch)
+            PAE_inputs, _, _ = batch
+            PAE_inputs = utility.ToDevice(PAE_inputs)
                         
             # Predict
             # outputs, latent, signal, params  = model(PAE_inputs)
@@ -108,9 +128,9 @@ def train_model(model, config, training_dataloader, validation_dataloader, log_w
     epochs = config["epochs"]
     
     # Input data shape
-    for batch, meta in training_dataloader:
+    for batch in training_dataloader:
         print(len(training_dataloader))
-        print(batch.shape)
+        print(batch[0].shape)
         break
     
     ## Training Loop
@@ -118,9 +138,9 @@ def train_model(model, config, training_dataloader, validation_dataloader, log_w
     
         running_loss = 0.0
     
-        for batch, meta in training_dataloader:
+        for batch in training_dataloader:
         
-            PAE_inputs = batch
+            PAE_inputs, _, _ = batch
             PAE_inputs = utility.ToDevice(PAE_inputs)
 
             # Zero the parameter gradients
@@ -142,7 +162,7 @@ def train_model(model, config, training_dataloader, validation_dataloader, log_w
         
             # Calculate running loss
             running_loss += loss.item() * PAE_inputs.size(0)
-            
+                                             
         train_loss = running_loss / len(training_dataloader.dataset)
         training_losses.append(train_loss)
         print(f'Epoch [{epoch+1}/{epochs}], Training Loss: {train_loss}')
@@ -181,7 +201,7 @@ def plot_df(dataloader, model, file_name="", col_names=""):
             end_index = start_index + 201
             
             # Transpose and convert to tensor
-            input_tensor, meta = batch
+            input_tensor, _, _ = batch
 
             output,_,_,_ = model(input_tensor)
         
@@ -256,24 +276,25 @@ def main():
     
     # Different Flags
     # Logging False
-    log_wandB = False
-    train_and_plot = False
+    log_wandB = True
+    train_and_plot = True
     
-    file_name = "PAE training Scherpeel Dataset - 10 Subjects 10 Phases - 25 epochs"
+    file_name = "PAE training Scherpeel Dataset - 10 Subjects 10 Phases - 40 epochs"
     project_name = "ICRA 2026"
     
     # COnfig the configurations
     config = {
         "training_tag": file_name,
         "project_name": project_name,
-        "epochs": 30,
-        "batch_size": 32,
+        "epochs": 40,
+        "batch_size": 128,
         "num_workers": 8,
         "momentum":0.9,
         "lr": 1e-4,
         "dropout": 0.0,
         "dataset": "IHMC Senorsuit",
         "seq_length": 201,
+        "pred_length": 1,
         "inputs": 21,
         "outputs": 21,
         "phases": 10,
@@ -306,16 +327,19 @@ def main():
     train_pairs,val_pairs = utility.split_pairs_train_val(all_pairs, val_frac=0.15)
     
     train_ds = GroupedSequenceDataset(
-        df_pae, seq_len=config["seq_length"], stride=1,
+        df_pae, seq_len=config["seq_length"], pred_len=config["pred_length"], stride=1,
         time_col="time", subject_col="subject", condition_col="condition",
         include_groups=train_pairs
         )
     
+    print("Training Samples: ", len(train_ds))
+    
     val_ds = GroupedSequenceDataset(
-        df_pae, seq_len=config["seq_length"], stride=1,
+        df_pae, seq_len=config["seq_length"], pred_len=config["pred_length"], stride=1,
         time_col="time", subject_col="subject", condition_col="condition",
         include_groups=val_pairs
         )
+    print("Validation Samples: ", len(val_ds))
     
     train_sampler = GroupedBatchSampler(train_ds, batch_size=config["batch_size"], shuffle=True, drop_last=False)
     train_loader  = DataLoader(train_ds, batch_sampler=train_sampler, num_workers=8, pin_memory=True)
@@ -394,8 +418,8 @@ def main():
     
     
     # # Plot all the different plots
-    plot_df(train_loader_plot, model)
-    plot_df(val_loader_plot, model)
+    # plot_df(train_loader_plot, model)
+    # plot_df(val_loader_plot, model)
     
 
 

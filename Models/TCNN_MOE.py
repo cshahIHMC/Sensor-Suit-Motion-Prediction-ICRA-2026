@@ -367,7 +367,76 @@ class MANN_TCN_DynamicWeights_Forecast(nn.Module):
         
         return out
     
-# Note on efficiency:
-# The ExpertConv1d above blends kernels per sample and then performs a per-sample conv.
-# This is simple and correct. For large batches, you can micro-batch or move to a grouped-conv
-# implementation by expanding inputs/weights block-diagonally. We can add that variant if needed.
+
+class MANN_TCN_DynamicWeights_Forecast_k(nn.Module):
+    """
+    TCN-MoE forecaster with temporal conditioning.
+    - predict_k(..., k): one-step-at-k (1..H) using FiLM on last features.
+    - predict_all(...): vectorized prediction for all steps 1..H.
+    """
+    def __init__(self,
+                 input_size: int,
+                 output_size: int,
+                 horizon: int,
+                 num_experts: int,
+                 tcn_channels,                # e.g., [64,128,128,256]
+                 gating_input: int,
+                 gating_hidden: int = 128,
+                 kernel_size: int = 2,
+                 tcn_dropout: float = 0.2,
+                 gating_dropout: float = 0.0,
+                 temperature: float = 1.0,
+                 t_dim: int = 16):            # <-- temporal embedding size
+        super().__init__()
+        self.horizon = horizon
+        self.output_size = output_size
+        self.last_dim = tcn_channels[-1]
+
+        # Gate + TCN unchanged
+        self.gate = GatingNet(gating_input, gating_hidden, num_experts,
+                              dropout=gating_dropout, temperature=temperature)
+        self.tcn = ExpertTemporalConvNet(num_experts, input_size, tcn_channels,
+                                         kernel_size=kernel_size, dropout=tcn_dropout)
+
+        # Learned embedding for horizons [1..H]
+        self.time_emb = nn.Embedding(horizon + 1, t_dim)
+
+        # Simple linear head
+        self.head = nn.Linear(self.last_dim + t_dim, output_size)
+
+    def _last_feats(self, phaseinputs: torch.Tensor, seq_input: torch.Tensor):
+        """
+        Helper: compute last TCN features once.
+        returns: feats_last: [B, C_last]
+        """
+        w = self.gate(phaseinputs)                 # (B, E)
+        feats_t = self.tcn(seq_input, w)           # (B, C_last, T)
+        feats_last = feats_t[:, :, -1]             # (B, C_last)
+        return feats_last
+
+    def forward(self, phaseinputs, seq_input, k: torch.LongTensor):
+        """
+        phaseinputs: [B, G]
+        seq_input:   [B, C_in, T]
+        k:           [B] integer tensor in [1..H] (different horizon per sample)
+        returns:     [B, D_out]  (prediction at horizon k only)
+        """
+        
+        if isinstance(k, torch.Tensor):
+            k = int(k.item())  # make sure it's an int
+        
+        B = seq_input.size(0)
+        feats = self._last_feats(phaseinputs, seq_input)    # [B, C_last]
+        
+        
+        # Build embeddings only up to K
+        device = feats.device
+        ks = torch.arange(1, k+1, device=device)         # [K]
+        tmat = self.time_emb(ks)                           # [K,t_dim]
+    
+        feats_exp = feats.unsqueeze(1).expand(B, k, -1)    # [B,K,C_last]
+        tmat_exp  = tmat.unsqueeze(0).expand(B, -1, -1)    # [B,K,t_dim]
+        z = torch.cat([feats_exp, tmat_exp], dim=-1)       # [B,K,C_last+t_dim]
+    
+        y = self.head(z)                                   # [B,K,D_out]
+        return y.transpose(1, 2).contiguous()              # [B,D_out,K]
