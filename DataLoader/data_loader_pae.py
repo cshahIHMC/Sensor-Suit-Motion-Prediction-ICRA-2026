@@ -94,7 +94,7 @@ class GroupedSequenceDataset(Dataset):
         # Slice windows (no pandas, minimal allocation)
         # Shapes: [seq_len, F] / [pred_len, F]
         PAE_input   = torch.tensor(group["pae_in"][s : s + self.seq_len].T)         # [21,Seq_length]
-        MANN_input  = torch.tensor(group["mann_in"][s + self.seq_len-50 : s + self.seq_len].T)            # [43,Seq_length]
+        MANN_input  = torch.tensor(group["mann_in"][s : s + self.seq_len].T)            # [43,Seq_length]
         MANN_output = torch.tensor(group["mann_out"][s + self.seq_len : s + self.total_len].T)    # [20,Pred_length]
 
         # Mean-center per feature

@@ -88,15 +88,17 @@ def calc_val_loss(model, PAE_model, validation_dataloader, lossFn, lossFn_no_red
             # y_pred = model(utility.ToDevice(FCNN_inputs))
             
             FCNN_inputs = utility.ToDevice(FCNN_inputs)
-            B = FCNN_inputs.size(0)
-            H = model.horizon
+            # B = FCNN_inputs.size(0)
+            # H = model.horizon
             
-            k = torch.randint(1, H+1, (1,), device=FCNN_inputs.device) 
+            # k = torch.randint(1, H+1, (1,), device=FCNN_inputs.device) 
             
             # TCNN_MOE
-            y_pred = model(phaseInputs, FCNN_inputs, k)
+            # y_pred = model(phaseInputs, FCNN_inputs, k)
+            y_pred = model(phaseInputs, FCNN_inputs)
             
-            FCNN_outputs = utility.ToDevice(FCNN_outputs[:,:,0:k])
+            # FCNN_outputs = utility.ToDevice(FCNN_outputs[:,:,0:k])
+            FCNN_outputs = utility.ToDevice(FCNN_outputs)
             
             # Calculate the loss
             loss = lossFn(y_pred,FCNN_outputs)
@@ -174,18 +176,20 @@ def train_model(model, config, training_dataloader, validation_dataloader, PAE_m
             # y_pred = model(utility.ToDevice(FCNN_inputs))
             
             FCNN_inputs = utility.ToDevice(FCNN_inputs)
-            B = FCNN_inputs.size(0)
-            H = model.horizon
+            # B = FCNN_inputs.size(0)
+            # H = model.horizon
             
-            k = torch.randint(1, H+1, (1,), device=FCNN_inputs.device) 
+            # k = torch.randint(1, H+1, (1,), device=FCNN_inputs.device) 
             
             
             
             # TCNN_MOE
-            y_pred = model(phaseInputs, FCNN_inputs, k)
+            # y_pred = model(phaseInputs, FCNN_inputs, k)
+            y_pred = model(phaseInputs, FCNN_inputs)
             
             # Target 
-            FCNN_outputs = utility.ToDevice(FCNN_outputs[:,:,0:k])
+            # FCNN_outputs = utility.ToDevice(FCNN_outputs[:,:,0:k])
+            FCNN_outputs = utility.ToDevice(FCNN_outputs)
              
             # Calculate the loss
             loss = lossFn(y_pred, FCNN_outputs)
@@ -219,13 +223,13 @@ def train_model(model, config, training_dataloader, validation_dataloader, PAE_m
     return training_losses, validation_losses    
 
 
-def results(dataloader, PAE_model, model, col_names, plot_save_name=None):
+def results(dataloader, PAE_model, model, col_names, window=10, plot_save_name=None):
     
-    stats_calc(dataloader, PAE_model, model, col_names)
-    # plot_results(dataloader, PAE_model, model, col_names)
+    stats_calc(dataloader, PAE_model, model, col_names, window=20)
+    plot_results(dataloader, PAE_model, model, col_names, window=20)
 
 
-def plot_results(dataloader, PAE_model, model, col_names, plot_save_name=None):
+def plot_results(dataloader, PAE_model, model, col_names, window=10, plot_save_name=None):
      
     model.eval()
     fig1, axs1 = plt.subplots(2, 5, figsize=(30,10), sharey=True, sharex=True)
@@ -254,10 +258,10 @@ def plot_results(dataloader, PAE_model, model, col_names, plot_save_name=None):
             phaseInputs = phaseInputs.reshape(phaseInputs.shape[0], -1)
             
             # TCNN_MOE
-            y_pred = model(phaseInputs, utility.ToDevice(FCNN_inputs),50)
+            y_pred = model(phaseInputs, utility.ToDevice(FCNN_inputs),window)
             
             pred_np = utility.Item(y_pred).numpy()
-            ground_truth_np = FCNN_outputs.numpy()
+            ground_truth_np = FCNN_outputs[:,:,0:window].numpy()
             
             batch_len = pred_np.shape[0]
             feature_len = pred_np.shape[1]
@@ -265,7 +269,8 @@ def plot_results(dataloader, PAE_model, model, col_names, plot_save_name=None):
             for i in range(0, batch_len, step):
                 
                 start_index = j*batch_len + i
-                end_index = start_index + dataloader.dataset.pred_len
+                # end_index = start_index + dataloader.dataset.pred_len
+                end_index = start_index + window
                 
                 for k in range(10):
                     
@@ -284,7 +289,7 @@ def plot_results(dataloader, PAE_model, model, col_names, plot_save_name=None):
     plt.show()            
                 
 def stats_calc(dataloader, PAE_model, model, col_names,
-                 plot_save_name=None):
+                 window=10, plot_save_name=None):
     model.eval()
     PAE_model.eval()
   
@@ -331,13 +336,13 @@ def stats_calc(dataloader, PAE_model, model, col_names,
             
             # TCNN future forecastor
             # y_pred = model(utility.ToDevice(FCNN_inputs))
-            
+                    
             # TCNN MOE
-            y_pred = model(phaseInputs, utility.ToDevice(FCNN_inputs), 50)
+            y_pred = model(phaseInputs, utility.ToDevice(FCNN_inputs), window)
 
             # errors in ORIGINAL scale: (pred - gt) * std
             # broadcast std over [B, F, T]
-            err = (y_pred - utility.ToDevice(FCNN_outputs)).to(dtype=torch.float64) * out_std.view(1, -1, 1)
+            err = (y_pred - utility.ToDevice(FCNN_outputs[:,:,0:window])).to(dtype=torch.float64) * out_std.view(1, -1, 1)
 
             abs_err = err.abs()                       # [B, F, T]
             sq_err  = err.pow(2)                      # [B, F, T]
@@ -376,21 +381,21 @@ def main():
     log_wandB = True
     train_and_plot = True
     
-    file_name = "Predictor training Scherpeel Dataset - 10 Subject - random forecast - MANN_TCN_DynamicWeights_Forecast_k(43,20,50,8,[32, 64, 64, 128, 32],50,256,3,0.2,0.2)"
+    file_name = "Predictor training Scherpeel Dataset - 10 Subject - random forecast - 5 epochs - MANN_TCN_DynamicWeights_Forecast(43,20,50,8,[64, 128, 128, 256, 64],50,256,3,0.2,0.2))"
     project_name = "ICRA 2026"
     
     # Config the configurations
     config = {
         "training_tag": file_name,
         "project_name": project_name,
-        "epochs": 40,
+        "epochs": 5,
         "batch_size": 128,
         "num_workers": 8,
         "momentum":0.9,
         "lr": 1e-4,
         "dataset": "IHMC Senorsuit",
         "seq_length": 201,
-        "pred_length":100,
+        "pred_length":50,
         "inputs": 43,
         "outputs": 20,
         "hidden_layers": 5,
@@ -482,7 +487,7 @@ def main():
         # MoE style TCNN
         # model =utility.ToDevice(MANN_TCN_DynamicWeights(43,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2))
         # model = utility.ToDevice(MANN_TCN_DynamicWeights_Forecast(43,20,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2))
-        model = utility.ToDevice(MANN_TCN_DynamicWeights_Forecast_k(43,20,100,8,[32, 64, 64, 128, 32],50,256,3,0.2,0.2))
+        model = utility.ToDevice(MANN_TCN_DynamicWeights_Forecast(43,20,50,8,[64, 128, 128, 256, 64],50,256,3,0.2,0.2))
 
         # Train
         training_losses, validation_losses = train_model(model=model, config=config, training_dataloader=train_loader, 
@@ -497,7 +502,7 @@ def main():
     
     else:
         
-        model_location = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20250904_1822_Predictor training Scherpeel Dataset - 10 Subject - random forecast - MANN_TCN_DynamicWeights_Forecast_k(43,20,50,8,[32, 64, 64, 128, 32],50,256,3,0.2,0.2).pth"
+        model_location = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20250905_0940_Predictor training Scherpeel Dataset - 10 Subject - random forecast - MANN_TCN_DynamicWeights_Forecast_k(43,20,50,8,[32, 64, 64, 128, 32],50,256,3,0.2,0.2).pth"
         weights = torch.load(model_location, weights_only=True)
         
         # model = utility.ToDevice(TCNModel(43,20,[64, 128, 128, 128, 256],2,0.2))
@@ -514,8 +519,8 @@ def main():
         model.load_state_dict(weights)
 
 
-    # results(train_loader_plot, PAE_model, model, cols_2_get[43:63])
-    results(val_loader_plot, PAE_model, model, cols_2_get[43:63])
+    results(train_loader_plot, PAE_model, model, cols_2_get[43:63])
+    # results(val_loader_plot, PAE_model, model, cols_2_get[43:63], window=50)
 
 
 
