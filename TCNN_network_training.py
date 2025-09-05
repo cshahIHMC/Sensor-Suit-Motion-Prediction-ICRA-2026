@@ -259,7 +259,6 @@ def plot_results(dataloader, PAE_model, model, col_names, plot_save_name=None):
             preds.append(pred_np)
             ground_truth.append(output_np)
             
-            break
                   
 
     # Concatenate all batch outputs
