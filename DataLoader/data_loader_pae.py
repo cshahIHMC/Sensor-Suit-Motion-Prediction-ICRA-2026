@@ -137,7 +137,8 @@ class GroupedBatchSampler(Sampler[List[int]]):
     def __iter__(self):
         rng = random.Random()
         if self.generator is not None:
-            seed = int(torch.randint(0, 2**31 - 1, (1,), generator=self.generator).item())
+            # seed = int(torch.randint(0, 2**31 - 1, (1,), generator=self.generator).item())
+            seed = 42
             rng.seed(seed)
 
         keys = self.group_keys[:]

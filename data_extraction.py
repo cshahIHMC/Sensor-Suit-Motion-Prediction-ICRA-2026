@@ -125,21 +125,24 @@ def extract_write_2_csv(dataDir, subject_list, dataWriteDir):
 
 
 def main():
-    data_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/Scheerpeel_Data_set/ProcessedData/"
+    data_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/Scheerpeel_Data_set/TestingStuff/"
     # sub_Name = "AB01/"
-    data_write_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/all_subjects_req_sim_data.csv"
+    data_write_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/Testing/AB02_jump_req_sim_data.csv"
     
     sub_list = {
-        "AB01/": 78.9,
+        # "AB01/": 78.9,
         "AB02/": 82.2,
-        "AB03/": 113.5,
-        "AB05/": 71.5,
-        "AB06/": 79.1,
-        "AB07/": 62.3,
-        "AB08/": 87.6,
-        "AB09/": 84.1,
-        "AB10/": 67.5,
-        "AB11/": 65.1   
+        # "AB03/": 113.5,
+        # "AB05/": 71.5,
+        # "AB06/": 79.1,
+        # "AB07/": 62.3,
+        # "AB08/": 87.6,
+        # "AB09/": 84.1,
+        # "AB10/": 67.5,
+        # "AB11/": 65.1 
+        # "AB12/": 64.0,
+        # "AB13/": 67.6     
+        
     }
     # weight = 78.9 # AB01: 78.9 kg
     # weight = 82.2 # AB02: 82.2 kg

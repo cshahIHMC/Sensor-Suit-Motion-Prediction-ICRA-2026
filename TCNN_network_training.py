@@ -68,20 +68,19 @@ def calc_val_loss(model, PAE_model, validation_dataloader, lossFn, lossFn_no_red
             PAE_inputs = utility.ToDevice(PAE_inputs)
                         
             # Predict
-            _, _, _, params  = PAE_model(PAE_inputs)
+            # _, _, _, params  = PAE_model(PAE_inputs)
             
-            # flattened_inputs = utility.ToDevice(FCNN_inputs.reshape(FCNN_inputs.shape[0], -1))
+            # # flattened_inputs = utility.ToDevice(FCNN_inputs.reshape(FCNN_inputs.shape[0], -1))
 
-            params_cat = torch.cat(params, dim=2)
-            phaseInputs = params_cat.reshape(params_cat.shape[0], -1)
-            phase_sin_x = torch.sin(2 * np.pi * params_cat[...,0])
-            phase_cos_x = torch.cos(2 * np.pi * params_cat[...,0])
+            # params_cat = torch.cat(params, dim=2)
+            # phaseInputs = params_cat.reshape(params_cat.shape[0], -1)
+            # phase_sin_x = torch.sin(2 * np.pi * params_cat[...,0])
+            # phase_cos_x = torch.cos(2 * np.pi * params_cat[...,0])
             
-            phaseInputs = torch.stack([phase_sin_x, phase_cos_x, params_cat[...,1], params_cat[...,2], params_cat[...,3]], dim=2) 
-            phaseInputs = phaseInputs.reshape(phaseInputs.shape[0], -1)
+            # phaseInputs = torch.stack([phase_sin_x, phase_cos_x, params_cat[...,1], params_cat[...,2], params_cat[...,3]], dim=2) 
+            # phaseInputs = phaseInputs.reshape(phaseInputs.shape[0], -1)
             
-            # TCNN 1 time step prediction
-            # y_pred = model(utility.ToDevice(FCNN_inputs))
+            
             
             FCNN_inputs = utility.ToDevice(FCNN_inputs)
             B, F, T = FCNN_inputs.shape
@@ -90,8 +89,11 @@ def calc_val_loss(model, PAE_model, validation_dataloader, lossFn, lossFn_no_red
             FCNN_inputs = torch.cat([FCNN_inputs,time_step_input], dim=1)
             FCNN_outputs = utility.ToDevice(FCNN_outputs[:,:,k]).squeeze(-1)
             
+            # TCNN 1 time step prediction
+            y_pred = model(FCNN_inputs)
+            
             # TCNN_MOE
-            y_pred = model(phaseInputs, FCNN_inputs)
+            # y_pred = model(phaseInputs, FCNN_inputs)
             
             # Calculate the loss
             loss = lossFn(y_pred,utility.ToDevice(FCNN_outputs.squeeze(-1)))
@@ -149,20 +151,19 @@ def train_model(model, config, training_dataloader, validation_dataloader, PAE_m
         
             PAE_inputs, FCNN_inputs, FCNN_outputs = batch
             
-            PAE_inputs = utility.ToDevice(PAE_inputs)
+            # PAE_inputs = utility.ToDevice(PAE_inputs)
             
-            PAE_model.eval()
-            _, _, _, params  = PAE_model(PAE_inputs)
+            # PAE_model.eval()
+            # _, _, _, params  = PAE_model(PAE_inputs)
             
-            params_cat = torch.cat(params, dim=2)
-            phaseInputs = params_cat.reshape(params_cat.shape[0], -1)
-            phase_sin_x = torch.sin(2 * np.pi * params_cat[...,0])
-            phase_cos_x = torch.cos(2 * np.pi * params_cat[...,0])
-            phaseInputs = torch.stack([phase_sin_x, phase_cos_x, params_cat[...,1], params_cat[...,2], params_cat[...,3]], dim=2) 
-            phaseInputs = phaseInputs.reshape(phaseInputs.shape[0], -1)
+            # params_cat = torch.cat(params, dim=2)
+            # phaseInputs = params_cat.reshape(params_cat.shape[0], -1)
+            # phase_sin_x = torch.sin(2 * np.pi * params_cat[...,0])
+            # phase_cos_x = torch.cos(2 * np.pi * params_cat[...,0])
+            # phaseInputs = torch.stack([phase_sin_x, phase_cos_x, params_cat[...,1], params_cat[...,2], params_cat[...,3]], dim=2) 
+            # phaseInputs = phaseInputs.reshape(phaseInputs.shape[0], -1)
               
-            # TCNN Prediction
-            # y_pred = model(utility.ToDevice(FCNN_inputs))
+            
             
             FCNN_inputs = utility.ToDevice(FCNN_inputs)
             B, F, T = FCNN_inputs.shape
@@ -173,7 +174,10 @@ def train_model(model, config, training_dataloader, validation_dataloader, PAE_m
             
             
             # TCNN_MOE
-            y_pred = model(phaseInputs, FCNN_inputs)
+            # y_pred = model(phaseInputs, FCNN_inputs)
+            
+            # TCNN Prediction
+            y_pred = model(FCNN_inputs)
             
        
             # Calculate the loss
@@ -205,14 +209,24 @@ def train_model(model, config, training_dataloader, validation_dataloader, PAE_m
             
     return training_losses, validation_losses    
 
-
-
-def plot_results(dataloader, PAE_model, model, col_names, plot_save_name=None):
+def stats_calc(dataloader, PAE_model, model, col_names,
+                 k, plot_save_name=None):
     model.eval()
+    PAE_model.eval()
+  
+    # ground_truth = []
+    # preds = []
     
-    ground_truth = []
-    preds = []
-    
+    device = next(model.parameters()).device
+    out_std = torch.as_tensor(dataloader.dataset.output_std, device=device, dtype=torch.float64)  # [F]
+
+    # Running accumulators (float64 for stability)
+    sum_abs   = torch.zeros_like(out_std, dtype=torch.float64)  # Σ |e|
+    sum_abs2  = torch.zeros_like(out_std, dtype=torch.float64)  # Σ |e|^2  (for std of abs error)
+    sum_sq    = torch.zeros_like(out_std, dtype=torch.float64)  # Σ e^2    (for RMSE)
+    count     = torch.tensor(0, dtype=torch.int64, device=device)  # total samples per feature
+
+
     with torch.no_grad():
         for batch in dataloader:
             
@@ -221,21 +235,119 @@ def plot_results(dataloader, PAE_model, model, col_names, plot_save_name=None):
             # print("FNN inputs last slice ", FCNN_inputs[-1,:,-1])
             # print("FNN outputs:", FCNN_outputs[-1,:])
             
-            PAE_inputs = utility.ToDevice(PAE_inputs)
+            # PAE_inputs = utility.ToDevice(PAE_inputs)
             
-            PAE_model.eval()
-            _, _, _, params  = PAE_model(PAE_inputs)
+            # PAE_model.eval()
+            # _, _, _, params  = PAE_model(PAE_inputs)
             
-            # # Flattening the inputs for the motion prediction network
-            # flattened_inputs = utility.ToDevice(FCNN_inputs.reshape(FCNN_inputs.shape[0], -1))
+            # # # Flattening the inputs for the motion prediction network
+            # # flattened_inputs = utility.ToDevice(FCNN_inputs.reshape(FCNN_inputs.shape[0], -1))
 
-            params_cat = torch.cat(params, dim=2)
-            # phaseInputs = params_cat.reshape(params_cat.shape[0], -1)
-            phase_sin_x = torch.sin(2 * np.pi * params_cat[...,0])
-            phase_cos_x = torch.cos(2 * np.pi * params_cat[...,0])
+            # params_cat = torch.cat(params, dim=2)
+            # # phaseInputs = params_cat.reshape(params_cat.shape[0], -1)
+            # phase_sin_x = torch.sin(2 * np.pi * params_cat[...,0])
+            # phase_cos_x = torch.cos(2 * np.pi * params_cat[...,0])
             
-            phaseInputs = torch.stack([phase_sin_x, phase_cos_x, params_cat[...,1], params_cat[...,2], params_cat[...,3]], dim=2) 
-            phaseInputs = phaseInputs.reshape(phaseInputs.shape[0], -1)
+            # phaseInputs = torch.stack([phase_sin_x, phase_cos_x, params_cat[...,1], params_cat[...,2], params_cat[...,3]], dim=2) 
+            # phaseInputs = phaseInputs.reshape(phaseInputs.shape[0], -1)
+            
+            
+            # TCNN 1 Step prediction
+            # y_pred = model(utility.ToDevice(FCNN_inputs))
+            
+            # TCNN future forecastor
+            # y_pred = model(utility.ToDevice(FCNN_inputs))
+                    
+            FCNN_inputs = utility.ToDevice(FCNN_inputs)
+            B, F, T = FCNN_inputs.shape
+            
+            time_step_input = torch.full((B, 1, T), k, device=FCNN_inputs.device, dtype=torch.long)
+            FCNN_inputs = torch.cat([FCNN_inputs,time_step_input], dim=1)
+            FCNN_outputs = utility.ToDevice(FCNN_outputs[:,:,k]).squeeze(-1)
+            
+         
+            
+            # TCNN 1 Step prediction
+            y_pred = model(FCNN_inputs)
+
+            # errors in ORIGINAL scale: (pred - gt) * std
+            # broadcast std over [B, F, T]
+            err = (y_pred - FCNN_outputs).to(dtype=torch.float64) * out_std.view(1, -1)
+
+            abs_err = err.abs()                       # [B, F, T]
+            sq_err  = err.pow(2)                      # [B, F, T]
+            abs_err2 = abs_err.pow(2)
+
+            # reduce over batch & time -> per-feature vectors
+            sum_abs   += abs_err.sum(dim=0)
+            sum_abs2  += abs_err2.sum(dim=0)
+            sum_sq    += sq_err.sum(dim=0)
+            count     += err.shape[0]   # B*T
+
+    # finalize metrics
+    count_f = count.to(torch.float64).clamp_min(1)
+    mae  = (sum_abs / count_f)                                 # per-feature
+    rmse = torch.sqrt(sum_sq / count_f)                         # per-feature
+    # std of absolute error (like np.std(|e|))
+    mean_abs = mae
+    var_abs  = (sum_abs2 / count_f) - mean_abs.pow(2)
+    var_abs  = torch.clamp(var_abs, min=0.0)
+    std_abs  = torch.sqrt(var_abs)
+
+    # # print nicely
+    # mae_np  = mae.cpu().numpy()
+    # std_np  = std_abs.cpu().numpy()
+    # rmse_np = rmse.cpu().numpy()
+
+    # print("Samples per feature (total N per feature):", int(count.item()))
+    # for i, joint in enumerate(col_names):
+    #     print(f"Joint {joint} MAE = {mae_np[i]:.4f}, STD = {std_np[i]:.4f}, RMSE = {rmse_np[i]:.4f}") 
+        
+        # ---- NEW: aggregate over the first 10 features ----
+    first10 = slice(0, 10)  # indices 0..9
+    mae_first10  = mae[first10].mean().item()
+    rmse_first10 = rmse[first10].mean().item()      # optional
+    std_first10  = std_abs[first10].mean().item()   # optional
+    
+    print(k)
+    print("Samples per feature (total N per feature):", int(count.item()))
+    print(f"MAE over first 10 features: {mae_first10:.4f}")
+    # If you also want these:
+    print(f"RMSE over first 10 features: {rmse_first10:.4f}")
+    print(f"STD(|error|) over first 10 features: {std_first10:.4f}")
+        
+        
+
+def plot_results(dataloader, PAE_model, model, col_names, plot_save_name=None):
+    model.eval()
+    
+    ground_truth = []
+    preds = []
+    
+    k =  99
+    with torch.no_grad():
+        for batch in dataloader:
+            
+            PAE_inputs, FCNN_inputs, FCNN_outputs = batch
+            # print("PAE inputs size: ", PAE_inputs.shape)
+            # print("FNN inputs last slice ", FCNN_inputs[-1,:,-1])
+            # print("FNN outputs:", FCNN_outputs[-1,:])
+            
+            # PAE_inputs = utility.ToDevice(PAE_inputs)
+            
+            # PAE_model.eval()
+            # _, _, _, params  = PAE_model(PAE_inputs)
+            
+            # # # Flattening the inputs for the motion prediction network
+            # # flattened_inputs = utility.ToDevice(FCNN_inputs.reshape(FCNN_inputs.shape[0], -1))
+
+            # params_cat = torch.cat(params, dim=2)
+            # # phaseInputs = params_cat.reshape(params_cat.shape[0], -1)
+            # phase_sin_x = torch.sin(2 * np.pi * params_cat[...,0])
+            # phase_cos_x = torch.cos(2 * np.pi * params_cat[...,0])
+            
+            # phaseInputs = torch.stack([phase_sin_x, phase_cos_x, params_cat[...,1], params_cat[...,2], params_cat[...,3]], dim=2) 
+            # phaseInputs = phaseInputs.reshape(phaseInputs.shape[0], -1)
             
             
             # TCNN 1 Step prediction
@@ -243,15 +355,18 @@ def plot_results(dataloader, PAE_model, model, col_names, plot_save_name=None):
             
             FCNN_inputs = utility.ToDevice(FCNN_inputs)
             B, F, T = FCNN_inputs.shape
-            k = 1
+            
             time_step_input = torch.full((B, 1, T), k, device=FCNN_inputs.device, dtype=torch.long)
             FCNN_inputs = torch.cat([FCNN_inputs,time_step_input], dim=1)
             FCNN_outputs = utility.ToDevice(FCNN_outputs[:,:,k]).squeeze(-1)
             
          
             
+            # TCNN 1 Step prediction
+            y_pred = model(FCNN_inputs)
+            
             # TCNN MOE
-            y_pred = model(phaseInputs, FCNN_inputs)
+            # y_pred = model(phaseInputs, FCNN_inputs)
 
             output_np = utility.Item(FCNN_outputs).numpy()
             pred_np = utility.Item(y_pred).numpy()
@@ -336,15 +451,15 @@ def main():
     log_wandB = True
     train_and_plot = True
     
-    file_name = "Predictor training Scherpeel Dataset - five subjects -  1 step prediction (random k prediction) - MANN_TCN_DynamicWeights(44,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2))"
+    file_name = "Predictor training Scherpeel Dataset - all subjects -  1 step prediction (random k prediction) - TCNModel(44,20,[64, 128, 128, 256, 64],4,0.2)"
     project_name = "ICRA 2026"
     
     # Config the configurations
     config = {
         "training_tag": file_name,
         "project_name": project_name,
-        "epochs": 20,
-        "batch_size": 128,
+        "epochs": 40,
+        "batch_size": 256,
         "num_workers": 8,
         "momentum":0.9,
         "lr": 1e-4,
@@ -366,7 +481,7 @@ def main():
         wandb.init( project=project_name, name= config["training_tag"], config=config)
     
     # Data setup
-    data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/five_subjects_req_sim_data.csv"
+    data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/all_subjects_req_sim_data.csv"
     PAE_model_file = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20250904_1754_PAE training Scherpeel Dataset - 10 Subjects 10 Phases - 40 epochs.pth"
     df = pd.read_csv(data_path)
     
@@ -430,10 +545,10 @@ def main():
     if train_and_plot:
         
         ## Load Model
-        # model = utility.ToDevice(TCNModel(43,20,[64, 128, 128, 256, 64],2,0.2))
+        model = utility.ToDevice(TCNModel(44,20,[64, 128, 128, 256, 64],4,0.2))
         
         # MoE style TCNN
-        model = utility.ToDevice(MANN_TCN_DynamicWeights(44,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2))
+        # model = utility.ToDevice(MANN_TCN_DynamicWeights(44,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2))
 
         # Train
         training_losses, validation_losses = train_model(model=model, config=config, training_dataloader=train_loader, 
@@ -441,23 +556,29 @@ def main():
 
 
         # Save the Model
-        # model_save_location = "Saved Models/" + datetime.now().strftime('%Y%m%d_%H%M') + "_" + config["training_tag"] + ".pth"
-        # torch.save(model.state_dict(), model_save_location)
+        model_save_location = "Saved Models/" + datetime.now().strftime('%Y%m%d_%H%M') + "_" + config["training_tag"] + ".pth"
+        torch.save(model.state_dict(), model_save_location)
 
         # model = model.to("cpu")
     
     else:
         
-        model_location = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20250902_1027_Predictor training Scherpeel Dataset - 5 Subject - MANN_TCN_DynamicWeights(43,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2).pth"
+        model_location = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20250909_2348_Predictor training Scherpeel Dataset - all subjects -  1 step prediction (random k prediction) - TCNModel(44,20,[64, 128, 128, 256, 64],2,0.2).pth"
         weights = torch.load(model_location, weights_only=True)
-        # model = utility.ToDevice(TCNModel(43,20,[64, 128, 128, 128, 256],2,0.2))
+        model = utility.ToDevice(TCNModel(44,20,[64, 128, 128, 256, 64],2,0.2))
         # MoE style TCNN
-        model =utility.ToDevice(MANN_TCN_DynamicWeights(44,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2))
+        # model =utility.ToDevice(MANN_TCN_DynamicWeights(44,20,10,[64, 128, 128, 256, 64],50,256,2,0.2,0.2))
         model.load_state_dict(weights)
 
 
     # plot_results(train_loader_plot, PAE_model, model, cols_2_get[43:63])
-    plot_results(val_loader_plot, PAE_model, model, cols_2_get[43:63])
+    # plot_results(val_loader_plot, PAE_model, model, cols_2_get[43:63])
+    
+    
+    # K = [0, 10, 20, 30, 40, 60, 80, 99 ]
+    
+    # for k in K:
+    #     stats_calc(val_loader_plot, PAE_model, model, cols_2_get[43:63], k)
 
 
 
