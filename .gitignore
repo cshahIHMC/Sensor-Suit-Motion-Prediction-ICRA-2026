@@ -4,6 +4,7 @@ __pycache__/
 
 # Ignore the Data folder
 Data/
+Data - Second Skin/
 
 # Ignore the plots folder
 Plots/

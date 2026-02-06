@@ -9,10 +9,8 @@ import random
 
 class GroupedSequenceDataset(Dataset):
     """
-    Returns (X_centered: [F, T], meta) windows where groups = (subject, condition).
-    - gyro columns: df.iloc[:, 0:21]
-    - insole columns: df.iloc[:, 42:48]  (column-wise normalized globally)
-    - windows never cross (subject, condition) boundaries
+    Returns (PAE_in: [T,21], MANN_in: [T,43], MANN_out: [pred_len,20]).
+    Windows never cross (subject, condition) boundaries.
     """
 
     def __init__(
@@ -45,13 +43,6 @@ class GroupedSequenceDataset(Dataset):
             mask = [tuple(x) in keys for x in df[[subject_col, condition_col]].values.tolist()]
             df = df.loc[mask].copy()
 
-        # Build groups: one DataFrame per (subject, condition)
-        self.groups: Dict[Tuple, pd.DataFrame] = {}
-        for key, g in df.groupby([subject_col, condition_col], sort=False):
-            # g = g.sort_values(self.time_col).reset_index(drop=True)
-            g = g.sort_index().reset_index(drop=True)
-            self.groups[key] = g
-
         # Global normalization for prediction inputs
         inputs_all = df.iloc[:, 0:43]
         self.input_mean = inputs_all.mean(axis=0)
@@ -64,38 +55,47 @@ class GroupedSequenceDataset(Dataset):
         self.output_std = outputs_all.std(axis=0)
         self.output_std[self.output_std == 0] = 1
         
-        # Global normalization for prediction outputs
+        # Build groups: one DataFrame per (subject, condition)
+        self.groups: Dict[Tuple, pd.DataFrame] = {}
+        for key, g in df.groupby([subject_col, condition_col], sort=False):
+            # g = g.sort_values(self.time_col).reset_index(drop=True)
+            g = g.sort_index().reset_index(drop=True)
+            
+            PAE_input = g.iloc[:, 0:21].to_numpy(dtype=np.float64, copy=True)
+            X = g.iloc[:, 0:43].to_numpy(dtype=np.float64, copy=True)
+            Y = g.iloc[:, 43:63].to_numpy(dtype=np.float64, copy=True)
+
+            # normalize once
+            X = (X - self.input_mean.values) / self.input_std.values
+            Y = (Y - self.output_mean.values) / self.output_std.values
+         
+            self.groups[key] = {
+                "pae_in": PAE_input.astype(np.float32, copy=False),  # [N,21]
+                "mann_in": X.astype(np.float32, copy=False),          # [N,43]
+                "mann_out": Y.astype(np.float32, copy=False),         # [N,20]
+                "length": X.shape[0],
+            }
 
         # Build window index: list of (group_key, start_idx)
         self.index: List[Tuple[Tuple, int]] = []
-        for key, g in self.groups.items():
-            n = len(g)
+        for key, groups in self.groups.items():
+            n = groups["length"]
             if n >= self.total_len:
                 for s in range(0, n - self.total_len + 1, self.stride):
                     self.index.append((key, s))
 
     def __len__(self):
         return len(self.index)
-
-    def _extract_block(self, g: pd.DataFrame, input_start: int, input_end: int, output_end:int) -> np.ndarray:
-        pae_input = g.iloc[input_start:input_end, 0:21].to_numpy(dtype=np.float64, copy=True)
-        mann_input = g.iloc[input_start:input_end, 0:43].to_numpy(dtype=np.float64, copy=True)
-        mann_output = g.iloc[input_end:output_end, 43:63].to_numpy(dtype=np.float64, copy=True)
-
-        mann_input = (mann_input - self.input_mean.values) / self.input_std.values
-        mann_output = (mann_output - self.output_mean.values) / self.output_std.values
-        
-        # X = np.hstack([gyro, ins])  # shape: [T, F]
-        return pae_input, mann_input, mann_output
-
+    
     def __getitem__(self, i: int):
         key, s = self.index[i]
-        g = self.groups[key]
+        group = self.groups[key]
 
-        PAE_input, MANN_input, MANN_output = self._extract_block(g, s, s + self.seq_len, s + self.total_len)           # [T, F]
-        PAE_input = torch.tensor(PAE_input, dtype=self.dtype).transpose(0, 1)     # [F, T]
-        MANN_input = torch.tensor(MANN_input, dtype=self.dtype).transpose(0, 1)
-        MANN_output = torch.tensor(MANN_output, dtype=self.dtype).transpose(0, 1)
+        # Slice windows (no pandas, minimal allocation)
+        # Shapes: [seq_len, F] / [pred_len, F]
+        PAE_input   = torch.tensor(group["pae_in"][s : s + self.seq_len].T)         # [21,Seq_length]
+        MANN_input  = torch.tensor(group["mann_in"][s : s + self.seq_len].T)            # [43,Seq_length]
+        MANN_output = torch.tensor(group["mann_out"][s + self.seq_len : s + self.total_len].T)    # [20,Pred_length]
 
         # Mean-center per feature
         PAE_input = PAE_input - PAE_input.mean(dim=1, keepdim=True)
@@ -137,7 +137,8 @@ class GroupedBatchSampler(Sampler[List[int]]):
     def __iter__(self):
         rng = random.Random()
         if self.generator is not None:
-            seed = int(torch.randint(0, 2**31 - 1, (1,), generator=self.generator).item())
+            # seed = int(torch.randint(0, 2**31 - 1, (1,), generator=self.generator).item())
+            seed = 42
             rng.seed(seed)
 
         keys = self.group_keys[:]
