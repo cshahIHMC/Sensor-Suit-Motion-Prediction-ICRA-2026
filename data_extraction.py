@@ -100,14 +100,76 @@ def extract_write_2_csv(dataDir, subject_list, dataWriteDir):
                     float_format='%.6f',      # e.g. 0.123457
                     quoting=csv.QUOTE_MINIMAL)
 
+
+def extract_req_data(dataWriteDir, dataReqDir):
     
+    df = pd.read_csv(dataWriteDir)
+
+    # Select only the required columns
+    required_columns = [
+        'time',
+        # Acc Data
+        'pelvis_acc_x','pelvis_acc_y','pelvis_acc_z',
+        'right_thigh_acc_x','right_thigh_acc_y','right_thigh_acc_z',
+        'right_shank_acc_x','right_shank_acc_y','right_shank_acc_z',
+        'right_foot_acc_x','right_foot_acc_y','right_foot_acc_z',
+        'left_thigh_acc_x','left_thigh_acc_y','left_thigh_acc_z',
+        'left_shank_acc_x','left_shank_acc_y','left_shank_acc_z',
+        'left_foot_acc_x','left_foot_acc_y','left_foot_acc_z',
+        
+        # Gyro Data
+        'pelvis_gyro_x','pelvis_gyro_y','pelvis_gyro_z',
+        'right_thigh_gyro_x','right_thigh_gyro_y','right_thigh_gyro_z',
+        'right_shank_gyro_x','right_shank_gyro_y','right_shank_gyro_z',
+        'right_foot_gyro_x','right_foot_gyro_y','right_foot_gyro_z',
+        'left_thigh_gyro_x','left_thigh_gyro_y','left_thigh_gyro_z',
+        'left_shank_gyro_x','left_shank_gyro_y','left_shank_gyro_z',
+        'left_foot_gyro_x','left_foot_gyro_y','left_foot_gyro_z',
+        
+        # Kinematic Data
+        'hip_flexion_r', 'high_adduction_r', 'hip_rotation_r',
+        'knee_angle_r',
+        'ankle_angle_r',
+        'hip_flexion_l', 'high_adduction_l', 'hip_rotation_l',
+        'knee_angle_l',
+        'ankle_angle_l',
+        # 'pelvis_tilt', 'pelvis_list', 'pelvis_rotation',   # Pelvis Data is optional
+
+        # Kinetic Data
+        'hip_flexion_r_moment', 'high_adduction_r_moment', 'hip_rotation_r_moment',
+        'knee_angle_r_moment',
+        'ankle_angle_r_moment',
+        'hip_flexion_l_moment', 'high_adduction_l_moment', 'hip_rotation_l_moment',
+        'knee_angle_l_moment',
+        'ankle_angle_l_moment',
+
+        # Subject Information
+        'subject', 'weight', 'height', 'age', 'sex',
+
+        # Trial Condition
+        'condition'
+    ]
+
+    df_req = df[required_columns]
+
+    # Size of the required data
+    print(df_req.shape)
+
+    # Write the required data to a new csv file
+    df_req.to_csv(dataReqDir,
+                    index=False,
+                    float_format='%.6f',      # e.g. 0.123457
+                    quoting=csv.QUOTE_MINIMAL)
+
+       
 
 
 def main():
     data_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/OpenSource_Dataset/Data/"
     # sub_Name = "AB01/"
-    data_write_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/5_Subjects_all_data.csv"
+    data_write_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/AB01_all_data.csv"
     
+    data_req_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/AB01_req_data.csv"
     
     # Subject Information - [Weight(kg), Height(m), Age(yrs), Sex(M-0 / F-1)]]
     sub_list = {
@@ -124,8 +186,11 @@ def main():
         
     }
     
-    # extract_write_2_csv(data_dir,sub_Name, data_write_dir, weight=78.90)
-    extract_write_2_csv(data_dir,sub_list, data_write_dir)
+    # Writes all the data
+    # extract_write_2_csv(data_dir,sub_list, data_write_dir)
+    
+    # Writes only the required data
+    extract_req_data(data_write_dir, data_req_dir)
 
 if __name__ == "__main__":
     raise SystemExit(main())
