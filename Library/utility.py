@@ -402,3 +402,184 @@ def plot_MANN_predictions(dataloader, PAE_model, model, col_names, tcnn=False):
         plt.xlabel("Time (samples)")
         plt.tight_layout()
         # plt.show()
+        
+        
+def plot_predictor_results(dataloader, model, col_names, window, PAE_model=None, moe_tcnn=False):
+     
+    model.eval()
+    fig1, axs1 = plt.subplots(2, 5, figsize=(30,10), sharey=True, sharex=True)
+    fig2, axs2 = plt.subplots(2, 5, figsize=(30,10), sharey=True, sharex=True)
+    
+    axs1_flat = axs1.flatten()
+    axs2_flat = axs2.flatten()
+    
+    step = 1
+    if window > 1:
+        step = 10
+    stop_plotting = 1
+    
+    with torch.no_grad():
+        for j, batch in enumerate(dataloader):
+               
+            Autoencoder_inputs, Predictor_inputs, Predictor_outputs = batch
+
+            Autoencoder_inputs = ToDevice(Autoencoder_inputs)
+            Predictor_input_gpu = ToDevice(Predictor_inputs)
+            
+            # 1-Time Prediction
+            Predictor_outputs = Predictor_outputs.squeeze(-1)  # Remove the pred_length dimension if it's 1, shape becomes [batch_size, output_features]
+            
+            if moe_tcnn:
+                PAE_model.eval()
+                _, _, _, params  = PAE_model(Autoencoder_inputs)
+
+                params_cat = torch.cat(params, dim=2)
+                phaseInputs = params_cat.reshape(params_cat.shape[0], -1)
+                phase_sin_x = torch.sin(2 * np.pi * params_cat[...,0])
+                phase_cos_x = torch.cos(2 * np.pi * params_cat[...,0])
+
+                phaseInputs = torch.stack([phase_sin_x, phase_cos_x, params_cat[...,1], params_cat[...,2], params_cat[...,3]], dim=2) 
+
+                phaseInputs = phaseInputs.reshape(phaseInputs.shape[0], -1)
+
+                # Flattening the inputs for the motion prediction network
+                # flattened_inputs = utility.ToDevice(Predictor_input.reshape(Predictor_input.shape[0], -1))
+
+                # Only using the last 20 time steps to predict the future time step
+                last_step_inputs = Predictor_input_gpu[:, :, -20:]              # shape = [batch, features]
+                flattened_inputs = ToDevice(last_step_inputs.reshape(last_step_inputs.shape[0], -1)) # already flat
+
+                # FCNN_combine_inputs = torch.cat((flattened_inputs, phaseInputs), dim=1)
+                
+                y_pred = model(phaseInputs, last_step_inputs)
+                
+            else:
+                # TCNN 1 Step prediction
+                y_pred = model(Predictor_input_gpu)
+                                
+            
+            
+            pred_np = Item(y_pred).permute(1, 0, 2).reshape(20,-1).numpy()
+            ground_truth_np = Predictor_outputs.permute(1, 0, 2).reshape(20,-1).numpy()
+            
+            batch_len = pred_np.shape[0]
+            feature_len = pred_np.shape[1]
+            
+            time_idx = range(j*feature_len, (j+1)*feature_len)
+            
+            
+            for i in range(0, feature_len, step):
+                
+                start_index = i
+                # end_index = start_index + dataloader.dataset.pred_len
+                end_index = start_index + window
+                
+                
+                for k in range(10):
+                    
+                    
+                    axs1_flat[k].plot(time_idx[start_index:end_index], pred_np[k,start_index:end_index], linewidth=1, alpha=1.0, color="red", label="Pred")
+                    axs1_flat[k].plot(time_idx[start_index:end_index], ground_truth_np[k,start_index:end_index], linewidth=1, alpha=0.75, color="black", label="Ground Truth")
+                    axs1_flat[k].set_title(col_names[k])
+                    
+                    axs2_flat[k].plot(time_idx[start_index:end_index], pred_np[k+10,start_index:end_index], linewidth=1, alpha=1.0, color="red", label="Pred")
+                    axs2_flat[k].plot(time_idx[start_index:end_index], ground_truth_np[k+10,start_index:end_index], linewidth=1, alpha=0.75, color="black", label="Ground Truth")
+                    axs2_flat[k].set_title(col_names[k+10])
+                    
+                    
+                
+    
+            if j == stop_plotting:
+                break
+                         
+    plt.tight_layout()
+    plt.show()            
+                
+def stats_predictor_cal(dataloader, model, col_names, PAE_model=None, moe_tcnn=False):
+    
+    model.eval()
+    
+    out_std = torch.as_tensor(dataloader.dataset.output_std, dtype=torch.float64)  # [F]
+
+    # Running accumulators (float64 for stability)
+    sum_abs   = torch.zeros_like(out_std, dtype=torch.float64)  # Σ |e|
+    sum_abs2  = torch.zeros_like(out_std, dtype=torch.float64)  # Σ |e|^2  (for std of abs error)
+    sum_sq    = torch.zeros_like(out_std, dtype=torch.float64)  # Σ e^2    (for RMSE)
+    count     = torch.tensor(0, dtype=torch.int64)  # total samples per feature
+
+
+    with torch.no_grad():
+        for batch in dataloader:
+            
+            Autoencoder_inputs, Predictor_inputs, Predictor_outputs = batch
+
+            Autoencoder_inputs = ToDevice(Autoencoder_inputs)
+            Predictor_input_gpu = ToDevice(Predictor_inputs)
+            
+            # 1-Time Prediction
+            Predictor_outputs = Predictor_outputs.squeeze(-1)  # Remove the pred_length dimension if it's 1, shape becomes [batch_size, output_features]
+            
+            
+            if moe_tcnn:
+                PAE_model.eval()
+                _, _, _, params  = PAE_model(Autoencoder_inputs)
+
+                params_cat = torch.cat(params, dim=2)
+                phaseInputs = params_cat.reshape(params_cat.shape[0], -1)
+                phase_sin_x = torch.sin(2 * np.pi * params_cat[...,0])
+                phase_cos_x = torch.cos(2 * np.pi * params_cat[...,0])
+
+                phaseInputs = torch.stack([phase_sin_x, phase_cos_x, params_cat[...,1], params_cat[...,2], params_cat[...,3]], dim=2) 
+
+                phaseInputs = phaseInputs.reshape(phaseInputs.shape[0], -1)
+
+                # Flattening the inputs for the motion prediction network
+                # flattened_inputs = utility.ToDevice(Predictor_input.reshape(Predictor_input.shape[0], -1))
+
+                # Only using the last 20 time steps to predict the future time step
+                last_step_inputs = Predictor_input_gpu[:, :, -20:]              # shape = [batch, features]
+                flattened_inputs = ToDevice(last_step_inputs.reshape(last_step_inputs.shape[0], -1)) # already flat
+
+                # FCNN_combine_inputs = torch.cat((flattened_inputs, phaseInputs), dim=1)
+                
+                y_pred = model(phaseInputs, last_step_inputs)
+                
+            else:
+                # TCNN 1 Step prediction
+                y_pred = model(Predictor_input_gpu)
+
+            # errors in ORIGINAL scale: (pred - gt) * std
+            # broadcast std over [B, F, T]
+                        
+            err = (Item(y_pred) - Predictor_outputs).to(dtype=torch.float64) * out_std.view(1, -1, 1)
+
+            abs_err = err.abs()                       # [B, F, T]
+            sq_err  = err.pow(2)                      # [B, F, T]
+            abs_err2 = abs_err.pow(2)
+
+            # reduce over batch & time -> per-feature vectors
+            reduce_dims = (0, 2)
+            sum_abs   += abs_err.sum(dim=reduce_dims)
+            sum_abs2  += abs_err2.sum(dim=reduce_dims)
+            sum_sq    += sq_err.sum(dim=reduce_dims)
+            count     += err.shape[0] * err.shape[2]  # B*T
+
+    # finalize metrics
+    count_f = count.to(torch.float64).clamp_min(1)
+    mae  = (sum_abs / count_f)                                 # per-feature
+    rmse = torch.sqrt(sum_sq / count_f)                         # per-feature
+    # std of absolute error (like np.std(|e|))
+    mean_abs = mae
+    var_abs  = (sum_abs2 / count_f) - mean_abs.pow(2)
+    var_abs  = torch.clamp(var_abs, min=0.0)
+    std_abs  = torch.sqrt(var_abs)
+
+    # print nicely
+    mae_np  = mae.cpu().numpy()
+    std_np  = std_abs.cpu().numpy()
+    rmse_np = rmse.cpu().numpy()
+
+    print("Samples per feature (total N per feature):", int(count.item()))
+    for i, joint in enumerate(col_names):
+        print(f"Joint {joint} MAE = {mae_np[i]:.4f}, STD = {std_np[i]:.4f}, RMSE = {rmse_np[i]:.4f}")        
+

@@ -16,7 +16,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from Models import PAE
 from Models.MANN import Model
-from Models.TCNN_MOE import MANN_TCN_DynamicWeights
+from Models.TCNN_MOE import MANN_TCN_DynamicWeights, MANN_TCN_DynamicWeights_Forecast
 
 ## Training Function
 def train_predictor_model(model, config, training_dataloader, validation_dataloader, log_wandB=False):   
@@ -73,9 +73,7 @@ def train_predictor_model(model, config, training_dataloader, validation_dataloa
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            
-            break
-            
+                     
             # Print statistics
             running_loss += loss.item() * Predictor_input.size(0)
                 
@@ -125,7 +123,7 @@ def calc_val_loss(model, validation_dataloader, lossFn, lossFn_no_reduction=None
             
             # Calculate running loss
             val_loss += loss.item() * Predictor_input.size(0)
-            break
+            
             
         val_loss = val_loss / len(validation_dataloader.dataset)
 
@@ -422,7 +420,7 @@ def main():
     if time_horizon_prediction != 1:
         future_forcast = True
     
-    model_to_train = "TCNN" # Can be "MANN", "MoETCNN", "PAE", "RNN" 
+    model_to_train = "MoETCNN" # Can be "MANN", "MoETCNN", "PAE", "RNN" 
     
     # Data Setup
     data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/AB01_req_data.csv"
@@ -560,17 +558,33 @@ def main():
                          ))
     
         PAE_model.load_state_dict(weights)
+        
+        if future_forcast:
             
-        model = utility.ToDevice(MANN_TCN_DynamicWeights( 
-                                    input_size=46,
-                                    output_size=20,
-                                    num_experts=10,
-                                    tcn_channels=[64, 128, 128, 256, 64],
-                                    gating_input=50,
-                                    gating_hidden=256,
-                                    kernel_size=6,
-                                    tcn_dropout=0.2,
-                                    gating_dropout=0.2))
+            model = utility.ToDevice(MANN_TCN_DynamicWeights_Forecast(
+                                        input_size=46,
+                                        output_size=20,
+                                        horizon=time_horizon_prediction,
+                                        num_experts=10,
+                                        tcn_channels=[64, 128, 128, 256, 64],
+                                        gating_input=50,
+                                        gating_hidden=256,
+                                        kernel_size=6,
+                                        tcn_dropout=0.2,
+                                        gating_dropout=0.2))
+            
+            
+        else:    
+            model = utility.ToDevice(MANN_TCN_DynamicWeights( 
+                                        input_size=46,
+                                        output_size=20,
+                                        num_experts=10,
+                                        tcn_channels=[64, 128, 128, 256, 64],
+                                        gating_input=50,
+                                        gating_hidden=256,
+                                        kernel_size=6,
+                                        tcn_dropout=0.2,
+                                        gating_dropout=0.2))
             
     if train_model_flag:
         
@@ -601,6 +615,8 @@ def main():
             train_loss, val_loss = train_MANN_model(model=model, config=config, training_dataloader=train_loader, 
                                                        validation_dataloader=val_loader, PAE_model=PAE_model, tcnn=True, log_wandB=log_wandB)
             
+            print("Trained the model succesfully - plotting will probably fail")
+            
         
         
         
@@ -620,9 +636,17 @@ def main():
     
     if model_to_train == "TCNN":
         if future_forcast:
-        else:
+            
+            utility.stats_predictor_cal(train_loader_plot, model, df.columns[46:66])
+            utility.plot_predictor_results(train_loader_plot, model, df.columns[46:66], window=time_horizon_prediction)
+
+            utility.stats_predictor_cal(val_loader_plot, model, df.columns[46:66])
+            utility.plot_predictor_results(val_loader_plot, model, df.columns[46:66], window=time_horizon_prediction)            
+            
+        else:            
             utility.plot_prediction(train_loader_plot, model, df.columns[46:66])
             utility.plot_prediction(val_loader_plot, model, df.columns[46:66])
+            
         plt.show()
         
     elif model_to_train == "PAE":
@@ -636,8 +660,18 @@ def main():
         plt.show()
         
     elif model_to_train == "MoETCNN":
-        utility.plot_MANN_predictions(train_loader_plot, PAE_model, model, df.columns[46:66], tcnn=True)
-        utility.plot_MANN_predictions(val_loader_plot, PAE_model, model, df.columns[46:66], tcnn=True)
+        
+        if future_forcast:
+            
+            utility.stats_predictor_cal(train_loader_plot, model, df.columns[46:66], PAE_model=PAE_model, moe_tcnn=True)
+            utility.plot_predictor_results(train_loader_plot, model, df.columns[46:66], window=time_horizon_prediction, PAE_model=PAE_model, moe_tcnn=True)
+
+            utility.stats_predictor_cal(val_loader_plot, model, df.columns[46:66], PAE_model=PAE_model, moe_tcnn=True)
+            utility.plot_predictor_results(val_loader_plot, model, df.columns[46:66], window=time_horizon_prediction, PAE_model=PAE_model, moe_tcnn=True) 
+            
+        else:
+            utility.plot_MANN_predictions(train_loader_plot, PAE_model, model, df.columns[46:66], tcnn=True)
+            utility.plot_MANN_predictions(val_loader_plot, PAE_model, model, df.columns[46:66], tcnn=True)
         plt.show()
         
         
