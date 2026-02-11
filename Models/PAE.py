@@ -109,7 +109,7 @@ class Model(nn.Module):
 
         y = self.deconv2(y)
 
-        y = y.reshape(y.shape[0], self.input_channels*self.time_range)
+        # y = y.reshape(y.shape[0], self.input_channels*self.time_range)
 
         return y, latent, signal, params
 

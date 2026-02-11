@@ -104,10 +104,11 @@ def extract_write_2_csv(dataDir, subject_list, dataWriteDir):
 def extract_req_data(dataWriteDir, dataReqDir):
     
     df = pd.read_csv(dataWriteDir)
+    print("All Data: ", df.shape)
 
     # Select only the required columns
     required_columns = [
-        'time',
+        # 'time',
         # Acc Data
         'pelvis_acc_x','pelvis_acc_y','pelvis_acc_z',
         'right_thigh_acc_x','right_thigh_acc_y','right_thigh_acc_z',
@@ -126,25 +127,28 @@ def extract_req_data(dataWriteDir, dataReqDir):
         'left_shank_gyro_x','left_shank_gyro_y','left_shank_gyro_z',
         'left_foot_gyro_x','left_foot_gyro_y','left_foot_gyro_z',
         
+        # Subject Specific Information
+        'weight', 'height', 'age', 'sex',
+        
         # Kinematic Data
-        'hip_flexion_r', 'high_adduction_r', 'hip_rotation_r',
+        'hip_flexion_r', 'hip_adduction_r', 'hip_rotation_r',
         'knee_angle_r',
         'ankle_angle_r',
-        'hip_flexion_l', 'high_adduction_l', 'hip_rotation_l',
+        'hip_flexion_l', 'hip_adduction_l', 'hip_rotation_l',
         'knee_angle_l',
         'ankle_angle_l',
         # 'pelvis_tilt', 'pelvis_list', 'pelvis_rotation',   # Pelvis Data is optional
 
         # Kinetic Data
-        'hip_flexion_r_moment', 'high_adduction_r_moment', 'hip_rotation_r_moment',
+        'hip_flexion_r_moment', 'hip_adduction_r_moment', 'hip_rotation_r_moment',
         'knee_angle_r_moment',
         'ankle_angle_r_moment',
-        'hip_flexion_l_moment', 'high_adduction_l_moment', 'hip_rotation_l_moment',
+        'hip_flexion_l_moment', 'hip_adduction_l_moment', 'hip_rotation_l_moment',
         'knee_angle_l_moment',
         'ankle_angle_l_moment',
 
-        # Subject Information
-        'subject', 'weight', 'height', 'age', 'sex',
+        # Subject 
+        'subject', 
 
         # Trial Condition
         'condition'
@@ -153,7 +157,7 @@ def extract_req_data(dataWriteDir, dataReqDir):
     df_req = df[required_columns]
 
     # Size of the required data
-    print(df_req.shape)
+    print("Required Data: ", df_req.shape)
 
     # Write the required data to a new csv file
     df_req.to_csv(dataReqDir,
@@ -167,19 +171,19 @@ def extract_req_data(dataWriteDir, dataReqDir):
 def main():
     data_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/OpenSource_Dataset/Data/"
     # sub_Name = "AB01/"
-    data_write_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/AB01_all_data.csv"
+    data_write_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/8_Subjects_all_data.csv"
     
-    data_req_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/AB01_req_data.csv"
+    data_req_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/8_subjects_req_data.csv"
     
     # Subject Information - [Weight(kg), Height(m), Age(yrs), Sex(M-0 / F-1)]]
     sub_list = {
         "AB01/": [86.9, 1.75, 23, 0],   
-        # "AB02/": [84.6, 1.72, 22, 0],
-        # "AB03/": [65.05, 1.765, 32, 0],
-        # "AB04/": [86.4, 1.794, 25, 0],
-        # "AB05/": [87.0, 1.59, 27, 1],
-        # "AB06/": [71.55, 1.868, 24, 0],
-        # "AB08/": [79.0, 1.82, 24, 0],
+        "AB02/": [84.6, 1.72, 22, 0],
+        "AB03/": [65.05, 1.765, 32, 0],
+        "AB04/": [86.4, 1.794, 25, 0],
+        "AB05/": [87.0, 1.59, 27, 1],
+        "AB06/": [71.55, 1.868, 24, 0],
+        "AB08/": [79.0, 1.82, 24, 0],
         # "AB09/": [58.2, 1.701, 24, 0],
         # "AB10/": [92.5, 1.825, 27, 0],
         # "AB11/": [73.5, 1.606, 28, 1] 
