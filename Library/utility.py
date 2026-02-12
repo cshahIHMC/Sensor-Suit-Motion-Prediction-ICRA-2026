@@ -240,13 +240,13 @@ def plot_train_val_loss(train_losses, val_losses):
     
 def plot_PAE_recon(dataloader, model, seq_length, col_names):
     model.eval()
-    fig, axs = plt.subplots(3, 8, figsize=(30,10), sharex=True, sharey=True)
-    
+    fig, axs = plt.subplots(3, 7, figsize=(30,10), sharex=True, sharey=True)
     
     step = 50
+    stop_plotting = 1
     
     with torch.no_grad():
-        for batch in dataloader:
+        for k, batch in enumerate(dataloader):
             # start_index = j * step
             # end_index = start_index + seq_length
             
@@ -261,14 +261,18 @@ def plot_PAE_recon(dataloader, model, seq_length, col_names):
             # output shape: [batch, 21, 201] -> [21, batch*201]
             output_flat = output.permute(1, 0, 2).reshape(21, -1).cpu().numpy()
             input_flat = input_tensor.permute(1, 0, 2).reshape(21, -1).cpu().numpy()
-                        
+            
+            
+    
+            feature_len = output_flat.shape[1]
             # Flattened time index for plotting
-            time_idx = range(output_flat.shape[1])
+            time_idx = range(k*feature_len, (k+1)*feature_len)
             
             for j in range(0, output_flat.shape[1], step):
                 
                 start_index = j
-                end_index = min(j + step, output_flat.shape[1])
+                end_index = min(start_index + seq_length, feature_len)
+                
                 for i in range(output_flat.shape[0]):
                     row = i % 3
                     col = i // 3
@@ -281,8 +285,9 @@ def plot_PAE_recon(dataloader, model, seq_length, col_names):
                     # Title and ticks
                     ax.set_title(col_names[i])
                     ax.tick_params(labelsize=8)
-
-            break  # Only plot the first batch for visualization
+                    
+            if k==stop_plotting:
+                break  # Only plot the first batch for visualization
             
     plt.tight_layout()
     # plt.show()
@@ -472,7 +477,7 @@ def plot_predictor_results(dataloader, model, col_names, window, PAE_model=None,
                 
                 start_index = i
                 # end_index = start_index + dataloader.dataset.pred_len
-                end_index = start_index + window
+                end_index = min(start_index + window, feature_len)
                 
                 
                 for k in range(10):

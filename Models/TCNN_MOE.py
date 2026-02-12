@@ -16,7 +16,9 @@ class Chomp1d(nn.Module):
         self.chomp_size = chomp_size
 
     def forward(self, x):
-        return x[:, :, :-self.chomp_size].contiguous()
+        if self.chomp_size > 0:
+            return x[:, :, :-self.chomp_size].contiguous()
+        return x
 
 class GatingNet(nn.Module):
     """ELU MLP gate (as in your MANN), outputs softmax weights over experts."""
@@ -27,15 +29,23 @@ class GatingNet(nn.Module):
         self.g3 = nn.Linear(gating_hidden, num_experts)
         self.dropout = dropout
         self.temperature = temperature
-        fab_mean = [2.467192929,	2.689329379,	2.301511835,	1.615357468,	1.128320369,	1.508496031,	3.130221223,	1.573682901,	2.772341662,	1.50293438,
-6.860783444,	6.739151548,	7.610071387,	9.500624887,	16.29390799,	10.13720771,	8.06256607,	10.23091513,	7.171807982,	10.23271936,
--0.169795494,	0.4229099394,	-0.08252106973,	0.5179610731,	0.3333109463,	0.1568129037,	-0.1917616939,	-0.1824299482,	0.3987468416,	-0.4091028753]
+        fab_mean = [-3.2564923e-02, -2.3406364e-02, 1.3240871e+00, 4.1014603e+01,
+                    -2.4297564e-01, -1.6370684e-02, -2.4113677e-02, 1.7107403e+00,
+                     5.4285000e+01,  4.5630690e-02,  4.6314280e-02,  1.9869128e-02,
+                     4.6051321e+00,  1.6846336e+01, -4.2095739e-01, -4.5052882e-02,
+                     1.0535752e-01,  3.1186976e+00,  2.3081659e+01, -2.0144255e-01,
+                     3.3257127e-02,  2.9932617e-03,  1.4969879e+00,  3.5440731e+01,
+                    -1.5683125e-01, -4.0017970e-02, -4.4576611e-02,  2.8906257e+00,
+                     2.4773144e+01,  1.8246192e+00]
+
         
-        fab_std = [0.3956809714,	0.4099752447,	0.3448475549,	0.2998622187,	0.1371841023,	0.2767423073,	0.3959645964,	0.4501494237,	0.4372817156,	0.3142905514,
-3.477569971,	3.57659353,	3.724063914,	4.10459222,	10.29098552,	4.758138646,	3.654683827,	5.114489902,	3.48244865,	4.801441989,
-1.788519854,	2.023547007,	1.952352893,	1.543184676,	3.710405277,	2.243364195,	2.080344177,	1.598657765,	2.171814158,	1.786187408]
-
-
+     
+        fab_std = [ 0.7077086,   0.70508003,  0.3104338,  16.11017   ,  6.2945657 ,  0.66618043,
+                    0.7445238,   0.34715655, 15.923401 ,   6.063388  ,  0.705116  ,  0.70655215,
+                    1.9695925,  10.840973  ,  3.1709101,   0.6837597 ,  0.72021097,  2.0887349,
+                   14.667681 ,   3.639706  ,  0.7222788,   0.69070977,  0.38787553, 16.480913,
+                    5.2354403,   0.7105775 ,  0.7003866,   0.99095803, 14.494578  ,  7.0202174 ]
+        
         # Register as buffers so they move with .to(device) / .cuda()
         self.register_buffer("fab_mean", torch.tensor(fab_mean, dtype=torch.float32))
         self.register_buffer("fab_std", torch.tensor(fab_std, dtype=torch.float32))
@@ -43,14 +53,17 @@ class GatingNet(nn.Module):
     def forward(self, g):
         # g: (B, G)
         # Normalize only features 21:50 (Python slicing is end-exclusive)
-        g[:, 20:50] = (g[:, 20:50] - self.fab_mean) / (self.fab_std + 1e-6)
+        # g[:, 20:50] = (g[:, 20:50] - self.fab_mean) / (self.fab_std + 1e-6)
         
         g = F.dropout(g, self.dropout, training=self.training)
         g = F.elu(self.g1(g))
         g = F.dropout(g, self.dropout, training=self.training)
         g = F.elu(self.g2(g))
         g = F.dropout(g, self.dropout, training=self.training)
-        logits = self.g3(g) / max(self.temperature, 1e-6)
+        
+        temperature = torch.clamp(torch.tensor(self.temperature, device=g.device), min=1e-6)
+        
+        logits = self.g3(g) / temperature
         w = F.softmax(logits, dim=1)  # (B, E)
         return w
         

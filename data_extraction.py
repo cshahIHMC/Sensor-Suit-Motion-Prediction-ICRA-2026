@@ -93,18 +93,23 @@ def extract_write_2_csv(dataDir, subject_list, dataWriteDir):
     
     print("Overall Data")       
     print(df_subjects.shape)
+    
+    req_cols = extract_req_data()
+    df_req = df_subjects[req_cols]
+    print("Required Data: ", df_req.shape)
+    
     # for col in df_subject.columns:
         # print(col)
-    df_subjects.to_csv(dataWriteDir,
+    df_req.to_csv(dataWriteDir,
                     index=False,
                     float_format='%.6f',      # e.g. 0.123457
                     quoting=csv.QUOTE_MINIMAL)
 
 
-def extract_req_data(dataWriteDir, dataReqDir):
+def extract_req_data():
     
-    df = pd.read_csv(dataWriteDir)
-    print("All Data: ", df.shape)
+    # df = pd.read_csv(dataWriteDir)
+    # print("All Data: ", df.shape)
 
     # Select only the required columns
     required_columns = [
@@ -154,16 +159,18 @@ def extract_req_data(dataWriteDir, dataReqDir):
         'condition'
     ]
 
-    df_req = df[required_columns]
+    # df_req = df[required_columns]
 
-    # Size of the required data
-    print("Required Data: ", df_req.shape)
+    # # Size of the required data
+    # print("Required Data: ", df_req.shape)
 
-    # Write the required data to a new csv file
-    df_req.to_csv(dataReqDir,
-                    index=False,
-                    float_format='%.6f',      # e.g. 0.123457
-                    quoting=csv.QUOTE_MINIMAL)
+    # # Write the required data to a new csv file
+    # df_req.to_csv(dataReqDir,
+    #                 index=False,
+    #                 float_format='%.6f',      # e.g. 0.123457
+    #                 quoting=csv.QUOTE_MINIMAL)
+    
+    return required_columns
 
        
 
@@ -171,9 +178,9 @@ def extract_req_data(dataWriteDir, dataReqDir):
 def main():
     data_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/OpenSource_Dataset/Data/"
     # sub_Name = "AB01/"
-    data_write_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/8_Subjects_all_data.csv"
+    data_write_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/10_Subjects_all_data.csv"
     
-    data_req_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/8_subjects_req_data.csv"
+    data_req_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/10_subjects_req_data.csv"
     
     # Subject Information - [Weight(kg), Height(m), Age(yrs), Sex(M-0 / F-1)]]
     sub_list = {
@@ -185,16 +192,16 @@ def main():
         "AB06/": [71.55, 1.868, 24, 0],
         "AB08/": [79.0, 1.82, 24, 0],
         "AB09/": [58.2, 1.701, 24, 0],
-        # "AB10/": [92.5, 1.825, 27, 0],
-        # "AB11/": [73.5, 1.606, 28, 1] 
+        "AB10/": [92.5, 1.825, 27, 0],
+        "AB11/": [73.5, 1.606, 28, 1] 
         
     }
     
     # Writes all the data
-    # extract_write_2_csv(data_dir,sub_list, data_write_dir)
+    extract_write_2_csv(data_dir,sub_list, data_req_dir)
     
     # Writes only the required data
-    extract_req_data(data_write_dir, data_req_dir)
+    # extract_req_data(data_write_dir, data_req_dir)
 
 if __name__ == "__main__":
     raise SystemExit(main())

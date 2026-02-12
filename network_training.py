@@ -251,8 +251,11 @@ def cal_PAE_val_loss(model, validation_dataloader, lossFn, lossFn_no_reduction):
         
     return val_loss
 
-def train_MANN_model(model, config, training_dataloader, validation_dataloader, PAE_model, tcnn=False, log_wandB=False):   
+def train_MANN_model(model, config, training_dataloader, validation_dataloader, PAE_model, tcnn=False, log_wandB=False, collect_phase=False):   
     
+    if collect_phase:
+        all_phases = []
+        
     ## Setting up an optimizer and a loss function - Original Paper used a AdamWr optimizer We using a simple SGD
     learning_rate = config["lr"]
 
@@ -277,6 +280,7 @@ def train_MANN_model(model, config, training_dataloader, validation_dataloader, 
     validation_losses = []
 
     epochs = config["epochs"]
+    
     
     ## Training Loop
     for epoch in range(epochs):
@@ -304,6 +308,15 @@ def train_MANN_model(model, config, training_dataloader, validation_dataloader, 
 
             phaseInputs = phaseInputs.reshape(phaseInputs.shape[0], -1)
             
+            if collect_phase:
+                # Select features 20:50 (Python indexing 20:50)
+                phase_20_50 = phaseInputs[:, 20:50]  # (B, 30)
+                # Flatten across batch: (B,30) -> (B*30,)
+                all_phases.append(phase_20_50.detach().cpu().numpy())
+            
+                continue
+                
+            
             # Flattening the inputs for the motion prediction network
             # flattened_inputs = utility.ToDevice(Predictor_input.reshape(Predictor_input.shape[0], -1))
             
@@ -319,7 +332,7 @@ def train_MANN_model(model, config, training_dataloader, validation_dataloader, 
                 y_pred = model(phaseInputs, utility.ToDevice(last_step_inputs))
             else:
                 y_pred, _ = model(phaseInputs, flattened_inputs) 
-                
+                            
                             
             # Calculate the loss
             loss = lossFn(y_pred, utility.ToDevice(Predictor_output))
@@ -331,7 +344,20 @@ def train_MANN_model(model, config, training_dataloader, validation_dataloader, 
       
             # Print statistics
             running_loss += loss.item() * Predictor_input.size(0)    
-                
+        
+        
+        if collect_phase and len(all_phases) > 0:
+            all_phase_arr = np.concatenate(all_phases, axis=0)  # (total_samples*30,)
+            phase_mean = all_phase_arr.mean(axis=0)
+            phase_std  = all_phase_arr.std(axis=0)
+            print("Collected phase data across batches")
+            print("Phase 20:50 mean:", phase_mean)
+            print("Phase 20:50 std:", phase_std)
+            
+            return 0, 0
+        
+        
+        
         train_loss = running_loss / len(training_dataloader.dataset)
         training_losses.append(train_loss)
         print(f'Epoch [{epoch+1}/{epochs}], Training Loss: {train_loss}')
@@ -347,6 +373,7 @@ def train_MANN_model(model, config, training_dataloader, validation_dataloader, 
                         "val/val_loss": val_loss,
                         "val/epoch":epoch})
         
+
             
     return training_losses, validation_losses  
 
@@ -414,20 +441,21 @@ def main():
     train_model_flag = True
     save_file = False
     future_forcast = False
+    collect_phase = False
     
-    time_horizon_prediction = 20 # Can be 1, 20, 50, 100
+    time_horizon_prediction = 1 # Can be 1, 20, 50, 100
     
     if time_horizon_prediction != 1:
         future_forcast = True
     
-    model_to_train = "MoETCNN" # Can be "MANN", "MoETCNN", "PAE", "RNN" 
+    model_to_train = "TCNN" # Can be "MANN", "MoETCNN", "PAE", "RNN" 
     
     # Data Setup
-    data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/AB01_req_data.csv"
+    data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/10_subjects_req_data.csv"
     
     # Model File to load
-    pae_model_file_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20260210_2036_PAE on SS Dataset - 8 Subjects.pth"
-    model_file_path = " "
+    pae_model_file_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20260212_0245_PAE on SS Dataset - 10 Subjects - 200 epochs.pth"
+    model_file_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20260212_0245_PAE on SS Dataset - 10 Subjects - 200 epochs.pth"
     
     file_name = model_to_train +" on SS Dataset - 8 Subjects"
     project_name = "ICRA 2026-GATech-Dataset"
@@ -436,7 +464,7 @@ def main():
     config = {
         "training_tag": file_name,
         "project_name": project_name,
-        "epochs": 1,
+        "epochs": 10,
         "batch_size": 256,
         "num_workers": 8,
         "momentum":0.9,
@@ -605,7 +633,7 @@ def main():
             
             # Train
             train_loss, val_loss = train_MANN_model(model=model, config=config, training_dataloader=train_loader, 
-                                                       validation_dataloader=val_loader, PAE_model=PAE_model, tcnn=False, log_wandB=log_wandB)
+                                                       validation_dataloader=val_loader, PAE_model=PAE_model, tcnn=False, log_wandB=log_wandB, collect_phase=collect_phase)
             
             
             
@@ -613,7 +641,7 @@ def main():
             
             # Train
             train_loss, val_loss = train_MANN_model(model=model, config=config, training_dataloader=train_loader, 
-                                                       validation_dataloader=val_loader, PAE_model=PAE_model, tcnn=True, log_wandB=log_wandB)
+                                                       validation_dataloader=val_loader, PAE_model=PAE_model, tcnn=True, log_wandB=log_wandB, collect_phase=collect_phase)
             
             print("Trained the model succesfully - plotting will probably fail")
             
