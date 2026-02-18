@@ -309,7 +309,7 @@ def plot_MANN_predictions(dataloader, PAE_model, model, col_names, tcnn=False):
             Autoencoder_inputs = ToDevice(Autoencoder_inputs)
             
             PAE_model.eval()
-            _, _, _, params  = PAE_model(Autoencoder_inputs)
+            params  = PAE_model(Autoencoder_inputs)
             
             
             params_cat = torch.cat(params, dim=2)
@@ -325,7 +325,7 @@ def plot_MANN_predictions(dataloader, PAE_model, model, col_names, tcnn=False):
             # flattened_inputs = utility.ToDevice(Predictor_input.reshape(Predictor_input.shape[0], -1))
             
             # Only using the last 20 time steps to predict the future time step
-            last_step_inputs = Predictor_input[:, :, -20:]              # shape = [batch, features]
+            last_step_inputs = Predictor_input[:, :, -50:]              # shape = [batch, features]
             flattened_inputs = ToDevice(last_step_inputs.reshape(last_step_inputs.shape[0], -1)) # already flat
             
             # FCNN_combine_inputs = torch.cat((flattened_inputs, phaseInputs), dim=1)
@@ -436,7 +436,7 @@ def plot_predictor_results(dataloader, model, col_names, window, PAE_model=None,
             
             if moe_tcnn:
                 PAE_model.eval()
-                _, _, _, params  = PAE_model(Autoencoder_inputs)
+                params  = PAE_model(Autoencoder_inputs)
 
                 params_cat = torch.cat(params, dim=2)
                 phaseInputs = params_cat.reshape(params_cat.shape[0], -1)
@@ -451,7 +451,7 @@ def plot_predictor_results(dataloader, model, col_names, window, PAE_model=None,
                 # flattened_inputs = utility.ToDevice(Predictor_input.reshape(Predictor_input.shape[0], -1))
 
                 # Only using the last 20 time steps to predict the future time step
-                last_step_inputs = Predictor_input_gpu[:, :, -20:]              # shape = [batch, features]
+                last_step_inputs = Predictor_input_gpu[:, :, -50:]              # shape = [batch, features]
                 flattened_inputs = ToDevice(last_step_inputs.reshape(last_step_inputs.shape[0], -1)) # already flat
 
                 # FCNN_combine_inputs = torch.cat((flattened_inputs, phaseInputs), dim=1)
@@ -527,7 +527,7 @@ def stats_predictor_cal(dataloader, model, col_names, PAE_model=None, moe_tcnn=F
             
             if moe_tcnn:
                 PAE_model.eval()
-                _, _, _, params  = PAE_model(Autoencoder_inputs)
+                params  = PAE_model(Autoencoder_inputs)
 
                 params_cat = torch.cat(params, dim=2)
                 phaseInputs = params_cat.reshape(params_cat.shape[0], -1)
@@ -542,7 +542,7 @@ def stats_predictor_cal(dataloader, model, col_names, PAE_model=None, moe_tcnn=F
                 # flattened_inputs = utility.ToDevice(Predictor_input.reshape(Predictor_input.shape[0], -1))
 
                 # Only using the last 20 time steps to predict the future time step
-                last_step_inputs = Predictor_input_gpu[:, :, -20:]              # shape = [batch, features]
+                last_step_inputs = Predictor_input_gpu[:, :, -50:]              # shape = [batch, features]
                 flattened_inputs = ToDevice(last_step_inputs.reshape(last_step_inputs.shape[0], -1)) # already flat
 
                 # FCNN_combine_inputs = torch.cat((flattened_inputs, phaseInputs), dim=1)

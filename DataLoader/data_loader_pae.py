@@ -73,6 +73,7 @@ class GroupedSequenceDataset(Dataset):
             # normalize once
             X = (X - self.input_mean.values) / self.input_std.values
             Y = (Y - self.output_mean.values) / self.output_std.values
+            # PAE_input = X[:, 21:42] 
          
             self.groups[key] = {
                 "Autoencoder_input": PAE_input.astype(np.float32, copy=False),  # [N,21]

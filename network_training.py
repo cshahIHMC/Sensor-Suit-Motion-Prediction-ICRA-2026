@@ -3,6 +3,7 @@
 # Train Predictor
 ## Imports
 from datetime import datetime
+import json
 import wandb
 import pandas as pd
 from Library import utility
@@ -297,7 +298,9 @@ def train_MANN_model(model, config, training_dataloader, validation_dataloader, 
             Predictor_output = Predictor_output.squeeze(-1)
             
             PAE_model.eval()
-            _, _, _, params  = PAE_model(Autoencoder_input)
+            # _, _, _, params  = PAE_model(Autoencoder_input)
+            params  = PAE_model(Autoencoder_input)
+            
             
             params_cat = torch.cat(params, dim=2)
             phaseInputs = params_cat.reshape(params_cat.shape[0], -1)
@@ -321,7 +324,7 @@ def train_MANN_model(model, config, training_dataloader, validation_dataloader, 
             # flattened_inputs = utility.ToDevice(Predictor_input.reshape(Predictor_input.shape[0], -1))
             
             # Only using the last 20 time steps to predict the future time step
-            last_step_inputs = Predictor_input[:, :, -20:]              # shape = [batch, features]
+            last_step_inputs = Predictor_input[:, :, -50:]              # shape = [batch, features]
             flattened_inputs = utility.ToDevice(last_step_inputs.reshape(last_step_inputs.shape[0], -1)) # already flat
             
             # FCNN_combine_inputs = torch.cat((flattened_inputs, phaseInputs), dim=1)
@@ -396,7 +399,8 @@ def calc_MANN_val_loss(model, PAE_model, validation_dataloader, lossFn, tcnn=Fal
             Predictor_output = Predictor_output.squeeze(-1)
             
             PAE_model.eval()
-            _, _, _, params  = PAE_model(Autoencoder_input)
+            # _, _, _, params  = PAE_model(Autoencoder_input)
+            params  = PAE_model(Autoencoder_input)
             
             params_cat = torch.cat(params, dim=2)
             phaseInputs = params_cat.reshape(params_cat.shape[0], -1)
@@ -411,7 +415,7 @@ def calc_MANN_val_loss(model, PAE_model, validation_dataloader, lossFn, tcnn=Fal
             # flattened_inputs = utility.ToDevice(Predictor_input.reshape(Predictor_input.shape[0], -1))
             
             # Only using the last 20 time steps to predict the future time step
-            last_step_inputs = Predictor_input[:, :, -20:]              # shape = [batch, features]
+            last_step_inputs = Predictor_input[:, :, -50:]              # shape = [batch, features]
             flattened_inputs = utility.ToDevice(last_step_inputs.reshape(last_step_inputs.shape[0], -1)) # already flat
             
             # FCNN_combine_inputs = torch.cat((flattened_inputs, phaseInputs), dim=1)
@@ -448,23 +452,23 @@ def main():
     if time_horizon_prediction != 1:
         future_forcast = True
     
-    model_to_train = "TCNN" # Can be "MANN", "MoETCNN", "PAE", "RNN" 
+    model_to_train = "PAE" # Can be "MANN", "MoETCNN", "PAE", "RNN" 
     
     # Data Setup
-    data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/10_subjects_req_data.csv"
+    data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/AB01_req_data.csv"
     
     # Model File to load
-    pae_model_file_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20260212_0245_PAE on SS Dataset - 10 Subjects - 200 epochs.pth"
+    pae_model_file_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20260212_0245_PAE on SS Dataset - 10 Subjects - 200 epochs (256 batch size).pth"
     model_file_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20260212_0245_PAE on SS Dataset - 10 Subjects - 200 epochs.pth"
     
-    file_name = model_to_train +" on SS Dataset - 8 Subjects"
+    file_name = model_to_train +" on SS Dataset 256-256 - input window 50"
     project_name = "ICRA 2026-GATech-Dataset"
     
     # Config the configurations
     config = {
         "training_tag": file_name,
         "project_name": project_name,
-        "epochs": 10,
+        "epochs": 1,
         "batch_size": 256,
         "num_workers": 8,
         "momentum":0.9,
@@ -505,10 +509,10 @@ def main():
 
     # Grouped batch samplers to ensure windows from the same (subject, condition) are in the same batch
     train_sampler = GroupedBatchSampler(train_ds, batch_size=config["batch_size"], shuffle=True, drop_last=False)
-    train_loader  = DataLoader(train_ds, batch_sampler=train_sampler, num_workers=8, pin_memory=True)
+    train_loader  = DataLoader(train_ds, batch_sampler=train_sampler, num_workers=16, pin_memory=True)
     
     val_sampler = GroupedBatchSampler(val_ds, batch_size=config["batch_size"], shuffle=False, drop_last=False)
-    val_loader  = DataLoader(val_ds, batch_sampler=val_sampler, num_workers=8, pin_memory=True)
+    val_loader  = DataLoader(val_ds, batch_sampler=val_sampler, num_workers=16, pin_memory=True)
     
     train_sampler_plot = GroupedBatchSampler(train_ds, batch_size=64, shuffle=False, drop_last=False)
     train_loader_plot  = DataLoader(train_ds, batch_sampler=train_sampler_plot, num_workers=8, pin_memory=True)
@@ -567,7 +571,7 @@ def main():
         model = utility.ToDevice(Model( gating_input=50,
                                            gating_hidden=256,
                                            gating_output=10,
-                                           main_input=46*20,
+                                           main_input=46*50,
                                            main_hidden=256,
                                            main_output=20,
                                            dropout=0.2))
@@ -652,6 +656,32 @@ def main():
             # Save the Model
             model_save_location = "Saved Models/"  + datetime.now().strftime('%Y%m%d_%H%M') + "_" + config["training_tag"] + ".pth"
             torch.save(model.state_dict(), model_save_location)
+            
+            model_dict = {
+                # Architecture
+                "model_class": model.__class__.__name__,
+                "pae_input_size": 21,
+                "mann_input_size": 46,
+                "output_size": 20,
+                "pae_window_size": 201,
+                "mann_window_size": 50,
+                # "hidden_size": model.hidden_size,
+                # "num_layers": model.num_layers,
+
+                # Training hyperparameters
+                "optimizer": "Adam",
+                "learning_rate": config["lr"],
+                "loss_fn": "MSELoss",
+
+                # Data normalization
+                "data_mean": train_ds.input_mean.tolist(),
+                "data_std": train_ds.input_std.tolist(),
+                }
+
+
+            model_save_location = "Saved Models/"  + datetime.now().strftime('%Y%m%d_%H%M') + "_" + config["training_tag"]
+            with open(model_save_location + '.json', 'w') as file:
+                json.dump(model_dict, file, indent=4)
         
         # Plot the training and validation loss curves        
         utility.plot_train_val_loss(train_loss, val_loss)

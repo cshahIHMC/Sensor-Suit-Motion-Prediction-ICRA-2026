@@ -112,6 +112,9 @@ class Model(nn.Module):
         # y = y.reshape(y.shape[0], self.input_channels*self.time_range)
 
         return y, latent, signal, params
+        # return params
+    
+
 
 
 
