@@ -6,12 +6,15 @@ import torch.nn.functional as F
 
 class Model(torch.nn.Module):
     # def __init__(self, gating_indices, gating_input, gating_hidden, gating_output, main_indices, main_input, main_hidden, main_output, dropout, input_norm, output_norm):
-    def __init__(self, gating_input, gating_hidden, gating_output, main_input, main_hidden, main_output, dropout):
+    def __init__(self, gating_input, gating_hidden, gating_output, main_input, main_hidden, main_output, prediction_horizon=1, dropout=0.2):
         super(Model, self).__init__()
 
         # if len(gating_indices) + len(main_indices) != len(input_norm[0]):
         #     print("Warning: Number of gating features (" + str(len(gating_indices)) + ") and main features (" + str(len(main_indices)) + ") are not the same as input features (" + str(len(input_norm[0])) + ").")
-
+        
+        self.prediction_horizon = prediction_horizon 
+        self.main_output = main_output
+        
         self.G1 = nn.Linear(gating_input, gating_hidden)
         self.G2 = nn.Linear(gating_hidden, gating_hidden)
         self.G3 = nn.Linear(gating_hidden, gating_output)
@@ -19,10 +22,28 @@ class Model(torch.nn.Module):
         self.E1 = ExpertLinear(gating_output, main_input, main_hidden)
         self.E2 = ExpertLinear(gating_output, main_hidden, main_hidden)
         self.E3 = ExpertLinear(gating_output, main_hidden, main_hidden)
-        self.E4 = ExpertLinear(gating_output, main_hidden, main_output)
+        self.E4 = ExpertLinear(gating_output, main_hidden, main_output*self.prediction_horizon)
         
         
-        ########## Gyro only -  256 batch size
+        
+        ################# Gyro only - robot deploymeny model
+        
+        # fab_mean =  [-1.4813520e-02, -1.7680524e-02,  4.3606391e+00,  7.8499985e+00,
+        #             -3.3292499e-01 ,-1.7320028e-02 , 5.2311115e-02 , 2.2798715e+00,
+        #              8.3591366e+00 ,-4.7156137e-01 , 1.6205247e-03 ,-4.6148133e-02,
+        #              4.2126966e+00 , 7.9355016e+00 ,-1.7642659e+00 ,-1.7868308e-02,
+        #             -1.4436913e-02 , 3.1708367e+00 , 7.8723817e+00 , 2.9580668e-01,
+        #             -4.5322448e-02 , 2.7330104e-02 , 2.8109205e+00 , 9.9263372e+00,
+        #             -4.3728560e-01 ,-2.4620000e-02 ,-3.3519906e-04 , 1.7296072e+00,
+        #              2.6996170e+01 ,-4.1694179e-01]
+
+        # fab_std = [ 0.6940749,   0.7184828,   2.4255052 ,  4.259709 ,   0.6399188,   0.6504347,
+        #             0.7568266,   1.4018822,   3.69157   ,  1.7991031,   0.7045002,   0.7077571,
+        #             2.2787652,   3.5203636,   0.55230355,  0.6430901,   0.7645032,   2.2616262,
+        #             4.087717 ,   1.2380868,   0.7005847 ,  0.7110393,   1.9676716,   4.821259,
+        #             2.0369024,   0.6885895,   0.72454906,  0.310683 ,  12.783689 ,   2.0226223 ]
+
+#         ########## Gyro only -  256 batch size
         
         fab_mean = [-1.3719495e-01,  1.7474059e-02,  1.3892955e+00,  3.6184311e+01,
                     -1.3428761e+00, -6.7557129e-03, -8.3445348e-02,  1.8992461e+00,
@@ -83,6 +104,7 @@ class Model(torch.nn.Module):
         # Register as buffers so they move with .to(device) / .cuda()
         self.register_buffer("fab_mean", torch.tensor(fab_mean, dtype=torch.float32))
         self.register_buffer("fab_std", torch.tensor(fab_std, dtype=torch.float32))
+        
 
 
         self.dropout = dropout
@@ -128,7 +150,10 @@ class Model(torch.nn.Module):
         
         m = F.dropout(m, self.dropout, training=self.training)
         m = self.E4(m, w)
-    
+        
+        m = m.view(m.shape[0], self.main_output, self.prediction_horizon)
+        
+        m = m.squeeze(-1)
    
         return m, w
 

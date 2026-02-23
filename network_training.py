@@ -18,9 +18,10 @@ import matplotlib.pyplot as plt
 from Models import PAE
 from Models.MANN import Model
 from Models.TCNN_MOE import MANN_TCN_DynamicWeights, MANN_TCN_DynamicWeights_Forecast
+from Models.FCNN import FCNN
 
 ## Training Function
-def train_predictor_model(model, config, training_dataloader, validation_dataloader, log_wandB=False):   
+def train_predictor_model(model, config, training_dataloader, validation_dataloader, tcnn=False, log_wandB=False):   
     
     ## Setting up an optimizer and a loss function - Original Paper used a AdamWr optimizer We using a simple SGD
     learning_rate = config["lr"]
@@ -58,23 +59,28 @@ def train_predictor_model(model, config, training_dataloader, validation_dataloa
             Autoencoder_input, Predictor_input, Predictor_output = batch        
             
             Predictor_input_gpu = utility.ToDevice(Predictor_input)
+            Predictor_input_gpu_flat = Predictor_input_gpu.reshape(Predictor_input_gpu.shape[0], -1)
             
             # 1-Time Prediction (It only works if there is a row with 1)
             Predictor_output = Predictor_output.squeeze(-1)  # Remove the pred_length dimension if it's 1, shape becomes [batch_size, output_features]
             
-            Predictor_output_gpu = utility.ToDevice(Predictor_output)
-                       
-            # TCNN Prediction
-            y_pred = model(Predictor_input_gpu)
+            Predictor_output_gpu = utility.ToDevice(Predictor_output)  
             
-            # Calculate the loss
+            if tcnn:
+                # TCNN Prediction
+                y_pred = model(Predictor_input_gpu)
+            else:
+                
+                # FCNN Prediction
+                y_pred = model(Predictor_input_gpu_flat)
+                
+            # Calculate the loss            
             loss = lossFn(y_pred, Predictor_output_gpu)
 
             # # Zero the parameter gradients
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-                     
             # Print statistics
             running_loss += loss.item() * Predictor_input.size(0)
                 
@@ -82,7 +88,7 @@ def train_predictor_model(model, config, training_dataloader, validation_dataloa
         training_losses.append(train_loss)
         print(f'Epoch [{epoch+1}/{epochs}], Training Loss: {train_loss}')
         
-        val_loss = calc_val_loss(model, validation_dataloader, lossFn)
+        val_loss = calc_val_loss(model, validation_dataloader, lossFn, tcnn=tcnn)
         validation_losses.append(val_loss)
 
         print(f'Epoch [{epoch+1}/{epochs}], Validation Loss: {val_loss}')
@@ -98,7 +104,7 @@ def train_predictor_model(model, config, training_dataloader, validation_dataloa
 
   
 # Function to calculate the PAE validation loss
-def calc_val_loss(model, validation_dataloader, lossFn, lossFn_no_reduction=None):
+def calc_val_loss(model, validation_dataloader, lossFn, tcnn=False, lossFn_no_reduction=None):
     model.eval()
     
     val_loss = 0.0
@@ -109,14 +115,20 @@ def calc_val_loss(model, validation_dataloader, lossFn, lossFn_no_reduction=None
             
             Autoencoder_input, Predictor_input, Predictor_output = batch    
             Predictor_input_gpu = utility.ToDevice(Predictor_input)
+            Predictor_input_gpu_flat = Predictor_input_gpu.reshape(Predictor_input_gpu.shape[0], -1)
                         
             # 1-Time Prediction
             Predictor_output = Predictor_output.squeeze(-1)  # Remove the pred_length dimension if it's 1, shape becomes [batch_size, output_features]
             
             Predictor_output_gpu = utility.ToDevice(Predictor_output)
             
-            # TCNN prediction
-            y_pred = model(Predictor_input_gpu)
+            if tcnn:
+                # TCNN Prediction
+                y_pred = model(Predictor_input_gpu)
+            else:
+                
+                # FCNN Prediction
+                y_pred = model(Predictor_input_gpu_flat)
             
             # Calculate the loss
             loss = lossFn(y_pred, Predictor_output_gpu)
@@ -447,21 +459,24 @@ def main():
     future_forcast = False
     collect_phase = False
     
-    time_horizon_prediction = 1 # Can be 1, 20, 50, 100
+    time_horizon_prediction = 1 # Can be 1, 5, 20, 50, 80, 100
     
     if time_horizon_prediction != 1:
         future_forcast = True
     
-    model_to_train = "PAE" # Can be "MANN", "MoETCNN", "PAE", "RNN" 
+    model_to_train = "FCNN_SW" # Can be "MANN", "MoETCNN", "PAE", "RNN" 
+    
+    if save_file:
+        print("Saving the model after training !!!")
     
     # Data Setup
     data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/AB01_req_data.csv"
     
     # Model File to load
     pae_model_file_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20260212_0245_PAE on SS Dataset - 10 Subjects - 200 epochs (256 batch size).pth"
-    model_file_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20260212_0245_PAE on SS Dataset - 10 Subjects - 200 epochs.pth"
+    model_file_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20260219_1302_MANN model for robot deployment .pth"
     
-    file_name = model_to_train +" on SS Dataset 256-256 - input window 50"
+    file_name = model_to_train +" for final Paper test k = " + str(time_horizon_prediction)
     project_name = "ICRA 2026-GATech-Dataset"
     
     # Config the configurations
@@ -469,10 +484,10 @@ def main():
         "training_tag": file_name,
         "project_name": project_name,
         "epochs": 1,
-        "batch_size": 256,
+        "batch_size": 128,
         "num_workers": 8,
         "momentum":0.9,
-        "lr": 5e-5,
+        "lr": 1e-4,
         "dataset": "IHMC Senorsuit",
         "seq_length": 201,
         "pred_length": time_horizon_prediction,
@@ -533,25 +548,36 @@ def main():
                                         input_size=46,
                                         output_size=20,
                                         horizon=time_horizon_prediction,
-                                        num_channels=[64, 128, 128, 256, 64],
+                                        num_channels=[80, 80, 80, 80, 80],
                                         kernel_size=6,
                                         dropout=0.2))
         else:   
             model = utility.ToDevice(TCNModel(
                                         input_size=46,
                                         output_size=20,
-                                        num_channels=[64, 128, 128, 256, 64],
+                                        num_channels=[80, 80, 80, 80, 80],
                                         kernel_size=6,
                                         dropout=0.2))
 
     elif model_to_train == "PAE":
         model = utility.ToDevice(PAE.Model(
-                              input_channels=21,
+                              input_channels=15,
                               embedding_channels=10,
-                              intermediate_channels=16,
+                              intermediate_channels=12,
                               time_range=201,
                               window=1.0
                              ))
+        
+    elif model_to_train == "FCNN_SW":
+            
+        model = utility.ToDevice(FCNN(
+                                    inputs=46, 
+                                    outputs=20, 
+                                    numOfLayers=5, 
+                                    hiddenDimension=512, 
+                                    input_seq_len=201, 
+                                    predictionHorizon=time_horizon_prediction, 
+                                    dropoutRate=0.2))
             
     elif model_to_train == "MANN":
             
@@ -566,15 +592,16 @@ def main():
                          ))
     
         PAE_model.load_state_dict(weights)
-            
+        
         # Setting up a mode adaptive neural network MANN
         model = utility.ToDevice(Model( gating_input=50,
-                                           gating_hidden=256,
-                                           gating_output=10,
-                                           main_input=46*50,
-                                           main_hidden=256,
-                                           main_output=20,
-                                           dropout=0.2))
+                                               gating_hidden=256,
+                                               gating_output=10,
+                                               main_input=46*50,
+                                               main_hidden=256,
+                                               main_output=20,
+                                               prediction_horizon=time_horizon_prediction,
+                                               dropout=0.2))
             
     elif model_to_train == "MoETCNN":
             
@@ -582,9 +609,9 @@ def main():
         ## Load PAE file
         weights = torch.load(pae_model_file_path, weights_only=True)
         PAE_model = utility.ToDevice(PAE.Model(
-                          input_channels=21,
+                          input_channels=15,
                           embedding_channels=10,
-                          intermediate_channels=16,
+                          intermediate_channels=12,
                           time_range=201,
                           window=1.0
                          ))
@@ -625,7 +652,7 @@ def main():
             
             # Train
             train_loss, val_loss = train_predictor_model(model=model, config=config, training_dataloader=train_loader, 
-                                                       validation_dataloader=val_loader, log_wandB=log_wandB)
+                                                       validation_dataloader=val_loader, tcnn=True, log_wandB=log_wandB)
         
         elif model_to_train == "PAE":
             
@@ -633,6 +660,12 @@ def main():
             train_loss, val_loss = train_PAE_model(model=model, config=config, training_dataloader=train_loader, 
                                                        validation_dataloader=val_loader, log_wandB=log_wandB)
         
+        elif model_to_train == "FCNN_SW":
+            
+            # Train
+            train_loss, val_loss = train_predictor_model(model=model, config=config, training_dataloader=train_loader, 
+                                                       validation_dataloader=val_loader, log_wandB=log_wandB)
+            
         elif model_to_train == "MANN":
             
             # Train
@@ -674,8 +707,10 @@ def main():
                 "loss_fn": "MSELoss",
 
                 # Data normalization
-                "data_mean": train_ds.input_mean.tolist(),
-                "data_std": train_ds.input_std.tolist(),
+                "data_input_mean": train_ds.input_mean.tolist(),
+                "data_input_std": train_ds.input_std.tolist(),
+                "data_output_mean": train_ds.output_mean.tolist(),
+                "data_output_std": train_ds.output_std.tolist()
                 }
 
 
@@ -684,7 +719,7 @@ def main():
                 json.dump(model_dict, file, indent=4)
         
         # Plot the training and validation loss curves        
-        utility.plot_train_val_loss(train_loss, val_loss)
+        # utility.plot_train_val_loss(train_loss, val_loss)
         
     else:
         
@@ -696,27 +731,49 @@ def main():
         if future_forcast:
             
             utility.stats_predictor_cal(train_loader_plot, model, df.columns[46:66])
-            utility.plot_predictor_results(train_loader_plot, model, df.columns[46:66], window=time_horizon_prediction)
+            # utility.plot_predictor_results(train_loader_plot, model, df.columns[46:66], window=time_horizon_prediction)
 
             utility.stats_predictor_cal(val_loader_plot, model, df.columns[46:66])
-            utility.plot_predictor_results(val_loader_plot, model, df.columns[46:66], window=time_horizon_prediction)            
+            # utility.plot_predictor_results(val_loader_plot, model, df.columns[46:66], window=time_horizon_prediction)            
             
         else:            
-            utility.plot_prediction(train_loader_plot, model, df.columns[46:66])
-            utility.plot_prediction(val_loader_plot, model, df.columns[46:66])
+            utility.plot_prediction(train_loader_plot, model, df.columns[46:66], tcnn=True)
+            utility.plot_prediction(val_loader_plot, model, df.columns[46:66], tcnn=True)
             
         plt.show()
         
     elif model_to_train == "PAE":
-        utility.plot_PAE_recon(train_loader_plot, model, config["seq_length"], df.columns[21:42])
-        utility.plot_PAE_recon(val_loader_plot, model, config["seq_length"], df.columns[21:42])
+        utility.plot_PAE_recon(train_loader_plot, model, config["seq_length"], df.columns[15:30])
+        utility.plot_PAE_recon(val_loader_plot, model, config["seq_length"], df.columns[15:30])
         plt.show()
         
     elif model_to_train == "MANN":
-        utility.plot_MANN_predictions(train_loader_plot, PAE_model, model, df.columns[46:66], tcnn=False)
-        utility.plot_MANN_predictions(val_loader_plot, PAE_model, model, df.columns[46:66], tcnn=False)
-        plt.show()
         
+        if future_forcast:
+            utility.stats_predictor_cal(train_loader_plot, model, df.columns[46:66], PAE_model=PAE_model, mann=True)
+            # utility.plot_predictor_results(train_loader_plot, model, df.columns[46:66], window=time_horizon_prediction, PAE_model=PAE_model, mann=True)
+
+            utility.stats_predictor_cal(val_loader_plot, model, df.columns[46:66], PAE_model=PAE_model, mann=True)
+            # utility.plot_predictor_results(val_loader_plot, model, df.columns[46:66], window=time_horizon_prediction, PAE_model=PAE_model, mann=True)        
+        else:
+            utility.plot_MANN_predictions(train_loader_plot, PAE_model, model, df.columns[32:44], tcnn=False)
+            utility.plot_MANN_predictions(val_loader_plot, PAE_model, model, df.columns[32:44], tcnn=False)
+        plt.show()
+    
+    elif model_to_train == "FCNN_SW":
+        if future_forcast:
+            
+            utility.stats_predictor_cal(train_loader_plot, model, df.columns[46:66], fcnn_sw=True)
+            # utility.plot_predictor_results(train_loader_plot, model, df.columns[46:66], window=time_horizon_prediction, fcnn_sw=True)
+
+            utility.stats_predictor_cal(val_loader_plot, model, df.columns[46:66], fcnn_sw=True)
+            # utility.plot_predictor_results(val_loader_plot, model, df.columns[46:66], window=time_horizon_prediction, fcnn_sw=True)            
+            
+        else:            
+            utility.plot_prediction(train_loader_plot, model, df.columns[46:66], tcnn=False)
+            utility.plot_prediction(val_loader_plot, model, df.columns[46:66], tcnn=False)
+        plt.show()   
+
     elif model_to_train == "MoETCNN":
         
         if future_forcast:

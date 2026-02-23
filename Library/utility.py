@@ -126,7 +126,7 @@ def split_pairs_train_val(pairs: List[Tuple[str, str]],
 
 
 # This function is to plot ploredictions - 1 Time step in the future
-def plot_prediction(dataloader, model, col_names, plot_save_name=None):
+def plot_prediction(dataloader, model, col_names, tcnn=False, plot_save_name=None):
     model.eval()
     
     ground_truth = []
@@ -139,14 +139,19 @@ def plot_prediction(dataloader, model, col_names, plot_save_name=None):
             Autoencoder_input, Predictor_input, Predictor_output = batch        
             
             Predictor_input_gpu = ToDevice(Predictor_input)
+            Predictor_input_gpu_flat = Predictor_input_gpu.reshape(Predictor_input_gpu.shape[0], -1)
             
             # 1-Time Prediction
             Predictor_output = Predictor_output.squeeze(-1)  # Remove the pred_length dimension if it's 1, shape becomes [batch_size, output_features]
             
             Predictor_output_gpu = ToDevice(Predictor_output)
             
-            # TCNN 1 Step prediction
-            y_pred = model(Predictor_input_gpu)
+            if tcnn:
+                # TCNN prediction
+                y_pred = model(Predictor_input_gpu_flat)
+            else:
+                # FCNN prediction
+                y_pred = model(Predictor_input_gpu_flat)
             
             output_np = Item(Predictor_output_gpu).numpy()
             pred_np = Item(y_pred).numpy()
@@ -409,7 +414,7 @@ def plot_MANN_predictions(dataloader, PAE_model, model, col_names, tcnn=False):
         # plt.show()
         
         
-def plot_predictor_results(dataloader, model, col_names, window, PAE_model=None, moe_tcnn=False):
+def plot_predictor_results(dataloader, model, col_names, window, PAE_model=None, moe_tcnn=False, mann=False, fcnn_sw=False):
      
     model.eval()
     fig1, axs1 = plt.subplots(2, 5, figsize=(30,10), sharey=True, sharex=True)
@@ -457,7 +462,34 @@ def plot_predictor_results(dataloader, model, col_names, window, PAE_model=None,
                 # FCNN_combine_inputs = torch.cat((flattened_inputs, phaseInputs), dim=1)
                 
                 y_pred = model(phaseInputs, last_step_inputs)
+            
+            elif mann:
+                PAE_model.eval()
+                params  = PAE_model(Autoencoder_inputs)
+
+                params_cat = torch.cat(params, dim=2)
+                phaseInputs = params_cat.reshape(params_cat.shape[0], -1)
+                phase_sin_x = torch.sin(2 * np.pi * params_cat[...,0])
+                phase_cos_x = torch.cos(2 * np.pi * params_cat[...,0])
+
+                phaseInputs = torch.stack([phase_sin_x, phase_cos_x, params_cat[...,1], params_cat[...,2], params_cat[...,3]], dim=2) 
+
+                phaseInputs = phaseInputs.reshape(phaseInputs.shape[0], -1)
+
+                # Flattening the inputs for the motion prediction network
+                # flattened_inputs = utility.ToDevice(Predictor_input.reshape(Predictor_input.shape[0], -1))
+
+                # Only using the last 20 time steps to predict the future time step
+                last_step_inputs = Predictor_input_gpu[:, :, -50:]              # shape = [batch, features]
+                flattened_inputs = ToDevice(last_step_inputs.reshape(last_step_inputs.shape[0], -1)) # already flat
+
+                # FCNN_combine_inputs = torch.cat((flattened_inputs, phaseInputs), dim=1)
                 
+                y_pred, _ = model(phaseInputs, flattened_inputs)
+            elif fcnn_sw:
+                Predictor_input_gpu_flat = Predictor_input_gpu.reshape(Predictor_input_gpu.shape[0], -1)
+                # FCNN sliding window prediction
+                y_pred = model(Predictor_input_gpu_flat)        
             else:
                 # TCNN 1 Step prediction
                 y_pred = model(Predictor_input_gpu)
@@ -500,7 +532,7 @@ def plot_predictor_results(dataloader, model, col_names, window, PAE_model=None,
     plt.tight_layout()
     plt.show()            
                 
-def stats_predictor_cal(dataloader, model, col_names, PAE_model=None, moe_tcnn=False):
+def stats_predictor_cal(dataloader, model, col_names, PAE_model=None, moe_tcnn=False, mann=False, fcnn_sw=False):
     
     model.eval()
     
@@ -549,6 +581,33 @@ def stats_predictor_cal(dataloader, model, col_names, PAE_model=None, moe_tcnn=F
                 
                 y_pred = model(phaseInputs, last_step_inputs)
                 
+            elif mann:
+                
+                PAE_model.eval()
+                params  = PAE_model(Autoencoder_inputs)
+
+                params_cat = torch.cat(params, dim=2)
+                phaseInputs = params_cat.reshape(params_cat.shape[0], -1)
+                phase_sin_x = torch.sin(2 * np.pi * params_cat[...,0])
+                phase_cos_x = torch.cos(2 * np.pi * params_cat[...,0])
+
+                phaseInputs = torch.stack([phase_sin_x, phase_cos_x, params_cat[...,1], params_cat[...,2], params_cat[...,3]], dim=2) 
+
+                phaseInputs = phaseInputs.reshape(phaseInputs.shape[0], -1)
+
+                # Flattening the inputs for the motion prediction network
+                # flattened_inputs = utility.ToDevice(Predictor_input.reshape(Predictor_input.shape[0], -1))
+
+                # Only using the last 20 time steps to predict the future time step
+                last_step_inputs = Predictor_input_gpu[:, :, -50:]              # shape = [batch, features]
+                flattened_inputs = ToDevice(last_step_inputs.reshape(last_step_inputs.shape[0], -1)) # already flat
+
+
+                y_pred, _ = model(phaseInputs, flattened_inputs)
+            elif fcnn_sw:
+                Predictor_input_gpu_flat = Predictor_input_gpu.reshape(Predictor_input_gpu.shape[0], -1)
+                # FCNN sliding window prediction
+                y_pred = model(Predictor_input_gpu_flat)    
             else:
                 # TCNN 1 Step prediction
                 y_pred = model(Predictor_input_gpu)
