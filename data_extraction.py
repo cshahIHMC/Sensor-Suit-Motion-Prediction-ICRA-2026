@@ -4,19 +4,6 @@
 import os
 import pandas as pd
 import csv
-# weight = 78.9 # AB01: 78.9 kg
-# weight = 82.2 # AB02: 82.2 kg
-# weight = 113.5# AB03: 113.5 kg
-# weight = 71.5 # AB05: 71.5 kg
-# weight = 79.1 # AB06: 79.1 kg
-# weight = 62.3 # AB07: 62.3 kg
-# weight = 87.6 # AB08: 87.6 kg 
-# weight = 84.1 # AB09: 84.1 kg
-# weight = 67.5 # AB10: 67.5 kg
-# weight = 65.1 # AB11: 65.1 kg
-# weight = 64.0 # AB12: 64.0 kg
-# weight = 67.6 # AB13: 67.6 kg
-
 
 # Downsampling function - down samples 1000Hz data to 200 Hz
 
@@ -33,19 +20,18 @@ def downSample(df, downsamplingFactor):
     
     return df_downSampled
 
-# Extracts and writes the data to an sql database fromm the keaton scherpeel dataset
-# def extract_write_2_csv(dataDir, SubjectName, dataWriteDir, weight=0.0):
+# Extracts and writes the data to an sql database fromm the Ryan and Christoph Dataset
 def extract_write_2_csv(dataDir, subject_list, dataWriteDir):
 
     df_subjects = pd.DataFrame()
     
-    for SubjectName, weight in subject_list.items():
+    for SubjectName, SubjectSpecificParams in subject_list.items():
         
         # Just to know what subject we are iterating over
         print(SubjectName)
 
         # Get a Subject data path
-        subjectDataPath = dataDir + SubjectName
+        subjectDataPath = dataDir + SubjectName + "MachineLearning/"
 
         # Change the target directory
         os.chdir(subjectDataPath)
@@ -53,113 +39,169 @@ def extract_write_2_csv(dataDir, subject_list, dataWriteDir):
         # Make a list of the folders containing data for different conditions
         conditions_list = [directory for directory in os.listdir() if os.path.isdir(directory)]
 
-
         df_subject = pd.DataFrame()
 
-        for dir in conditions_list:
-
+        for conditionName in conditions_list:
+            
             # Folder path to the conditions
-            conditionFolderPath = subjectDataPath + dir
+            conditionFolderPath = subjectDataPath + conditionName
 
-
+            # List of all the files in the condition folder
             all_files = os.listdir(conditionFolderPath)
 
             # Weed out csv files
             files = [file for file in all_files if file.endswith(".csv")]
-
-            # Initialize a pandas dataframe  for every condition
+            
+            # Initialize a pandas dataframe  
             df_condition = pd.DataFrame()
-
-            # Condition Name
-            conditionName = SubjectName[:-1] + "_" + dir
-
+            
             for file in files:
-
-                # Get the name of the type of data
-                dataName = file[len(conditionName)+1:-4]
-
-                if dataName == "activity_flag" or dataName == "emg" or dataName == "moment" or dataName == "power" or dataName == "grf" or dataName == "moment_filt" or dataName == "imu_real":
-                    continue 
-                
+ 
                 # Data Path
                 dataPath = conditionFolderPath + "/" + file
+        
                 # Read it into a pandas dataframe
 
                 df_data = pd.read_csv(dataPath)
-
-                # Only the EMG Data needs downsampling
-                if dataName == "emg":
-                    downSamplingFactor = 10
-                    df_data = downSample(df_data, downSamplingFactor) 
-
+                
+                # if NAN fill it with 0s
                 df_data.fillna(0, inplace=True)
+                
+                # Add data from the different files in the condition folder on top of each other
+                df_condition = pd.concat([df_condition, df_data], axis=0, ignore_index=True)
+                
+                
 
-                ## Add data from the different data folder to one single data frame right next to each other
-                df_condition = pd.concat([df_condition, df_data], axis=1)
-
-            ## Remove duplicate cols
+            # Remove duplicate cols
             df_condition = df_condition.loc[:, ~df_condition.columns.duplicated()]
 
-            ## Add the name of the condition that we adding data to the database for
-            df_condition['condition'] = dir
+            # Add the name of the condition that we adding data to the database for
+            df_condition['condition'] = conditionName
             df_condition['subject'] = SubjectName[:-1]
-            df_condition['weight'] = weight
+            df_condition['weight'] = SubjectSpecificParams[0]  # Weight is in Kgs
+            df_condition['height'] = SubjectSpecificParams[1]  # Height is in m
+            df_condition['age'] = SubjectSpecificParams[2]  # Age is in years
+            df_condition['sex'] = SubjectSpecificParams[3]  # Sex is M-0 / F-1
 
             # Generate a subject level df
             df_subject = pd.concat([df_subject, df_condition], axis=0, ignore_index=True)      
-        
+            
+
         print(df_subject.shape)
         
         df_subjects = pd.concat([df_subjects, df_subject], axis=0, ignore_index=True)
     
     print("Overall Data")       
     print(df_subjects.shape)
+    
+    req_cols = extract_req_data()
+    df_req = df_subjects[req_cols]
+    print("Required Data: ", df_req.shape)
+    
     # for col in df_subject.columns:
         # print(col)
-    df_subjects.to_csv(dataWriteDir,
+    df_req.to_csv(dataWriteDir,
                     index=False,
                     float_format='%.6f',      # e.g. 0.123457
                     quoting=csv.QUOTE_MINIMAL)
 
+
+def extract_req_data():
     
+    # df = pd.read_csv(dataWriteDir)
+    # print("All Data: ", df.shape)
+
+    # Select only the required columns
+    required_columns = [
+        # 'time',
+        # Acc Data
+        'pelvis_acc_x','pelvis_acc_y','pelvis_acc_z',
+        'right_thigh_acc_x','right_thigh_acc_y','right_thigh_acc_z',
+        'right_shank_acc_x','right_shank_acc_y','right_shank_acc_z',
+        'right_foot_acc_x','right_foot_acc_y','right_foot_acc_z',
+        'left_thigh_acc_x','left_thigh_acc_y','left_thigh_acc_z',
+        'left_shank_acc_x','left_shank_acc_y','left_shank_acc_z',
+        'left_foot_acc_x','left_foot_acc_y','left_foot_acc_z',
+        
+        # Gyro Data
+        'pelvis_gyro_x','pelvis_gyro_y','pelvis_gyro_z',
+        'right_thigh_gyro_x','right_thigh_gyro_y','right_thigh_gyro_z',
+        'right_shank_gyro_x','right_shank_gyro_y','right_shank_gyro_z',
+        'right_foot_gyro_x','right_foot_gyro_y','right_foot_gyro_z',
+        'left_thigh_gyro_x','left_thigh_gyro_y','left_thigh_gyro_z',
+        'left_shank_gyro_x','left_shank_gyro_y','left_shank_gyro_z',
+        'left_foot_gyro_x','left_foot_gyro_y','left_foot_gyro_z',
+        
+        # Subject Specific Information
+        'weight', 'height', 'age', 'sex',
+        
+        # Kinematic Data
+        'hip_flexion_r', 'hip_adduction_r', 'hip_rotation_r',
+        'knee_angle_r',
+        'ankle_angle_r',
+        'hip_flexion_l', 'hip_adduction_l', 'hip_rotation_l',
+        'knee_angle_l',
+        'ankle_angle_l',
+        # 'pelvis_tilt', 'pelvis_list', 'pelvis_rotation',   # Pelvis Data is optional
+
+        # Kinetic Data
+        'hip_flexion_r_moment', 'hip_adduction_r_moment', 'hip_rotation_r_moment',
+        'knee_angle_r_moment',
+        'ankle_angle_r_moment',
+        'hip_flexion_l_moment', 'hip_adduction_l_moment', 'hip_rotation_l_moment',
+        'knee_angle_l_moment',
+        'ankle_angle_l_moment',
+
+        # Subject 
+        'subject', 
+
+        # Trial Condition
+        'condition'
+    ]
+
+    # df_req = df[required_columns]
+
+    # # Size of the required data
+    # print("Required Data: ", df_req.shape)
+
+    # # Write the required data to a new csv file
+    # df_req.to_csv(dataReqDir,
+    #                 index=False,
+    #                 float_format='%.6f',      # e.g. 0.123457
+    #                 quoting=csv.QUOTE_MINIMAL)
+    
+    return required_columns
+
+       
 
 
 def main():
-    data_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/Scheerpeel_Data_set/TestingStuff/"
+    data_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/OpenSource_Dataset/Data/"
     # sub_Name = "AB01/"
-    data_write_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/Testing/AB02_jump_req_sim_data.csv"
+    data_write_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/10_Subjects_all_data.csv"
     
+    data_req_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/10_subjects_req_data.csv"
+    
+    # Subject Information - [Weight(kg), Height(m), Age(yrs), Sex(M-0 / F-1)]]
     sub_list = {
-        # "AB01/": 78.9,
-        "AB02/": 82.2,
-        # "AB03/": 113.5,
-        # "AB05/": 71.5,
-        # "AB06/": 79.1,
-        # "AB07/": 62.3,
-        # "AB08/": 87.6,
-        # "AB09/": 84.1,
-        # "AB10/": 67.5,
-        # "AB11/": 65.1 
-        # "AB12/": 64.0,
-        # "AB13/": 67.6     
+        "AB01/": [86.9, 1.75, 23, 0],   
+        "AB02/": [84.6, 1.72, 22, 0],
+        "AB03/": [65.05, 1.765, 32, 0],
+        "AB04/": [86.4, 1.794, 25, 0],
+        "AB05/": [87.0, 1.59, 27, 1],
+        "AB06/": [71.55, 1.868, 24, 0],
+        "AB08/": [79.0, 1.82, 24, 0],
+        "AB09/": [58.2, 1.701, 24, 0],
+        "AB10/": [92.5, 1.825, 27, 0],
+        "AB11/": [73.5, 1.606, 28, 1] 
         
     }
-    # weight = 78.9 # AB01: 78.9 kg
-    # weight = 82.2 # AB02: 82.2 kg
-    # weight = 113.5# AB03: 113.5 kg
-    # weight = 71.5 # AB05: 71.5 kg
-    # weight = 79.1 # AB06: 79.1 kg
-    # weight = 62.3 # AB07: 62.3 kg
-    # weight = 87.6 # AB08: 87.6 kg 
-    # weight = 84.1 # AB09: 84.1 kg
-    # weight = 67.5 # AB10: 67.5 kg
-    # weight = 65.1 # AB11: 65.1 kg
-    # weight = 64.0 # AB12: 64.0 kg
-    # weight = 67.6 # AB13: 67.6 kg
-
     
-    # extract_write_2_csv(data_dir,sub_Name, data_write_dir, weight=78.90)
-    extract_write_2_csv(data_dir,sub_list, data_write_dir)
+    # Writes all the data
+    extract_write_2_csv(data_dir,sub_list, data_req_dir)
+    
+    # Writes only the required data
+    # extract_req_data(data_write_dir, data_req_dir)
 
 if __name__ == "__main__":
     raise SystemExit(main())

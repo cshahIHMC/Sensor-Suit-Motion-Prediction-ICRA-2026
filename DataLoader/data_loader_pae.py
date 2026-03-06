@@ -18,21 +18,27 @@ class GroupedSequenceDataset(Dataset):
         df: pd.DataFrame,
         seq_len: int,
         pred_len: int,
-        time_col: str = "time",
         subject_col: str = "subject",
         condition_col: str = "condition",
         include_groups: Optional[Iterable[Tuple]] = None,
         stride: int = 1,
+        input_start: int = 0,
+        input_end: int = 46,
+        output_start: int = 46,
+        output_end: int = 66,
         dtype: torch.dtype = torch.float32,
     ):
         self.seq_len = seq_len
         self.pred_len = pred_len
         self.total_len = self.seq_len + self.pred_len
-        self.time_col = time_col
         self.indices = df.index.tolist()
         self.subject_col = subject_col
         self.condition_col = condition_col
         self.stride = stride
+        self.input_start = input_start
+        self.input_end = input_end
+        self.output_start = output_start
+        self.output_end = output_end
         self.dtype = dtype
 
         df = df.copy()
@@ -44,13 +50,13 @@ class GroupedSequenceDataset(Dataset):
             df = df.loc[mask].copy()
 
         # Global normalization for prediction inputs
-        inputs_all = df.iloc[:, 0:43]
+        inputs_all = df.iloc[:, self.input_start:self.input_end]
         self.input_mean = inputs_all.mean(axis=0)
         self.input_std = inputs_all.std(axis=0)
         self.input_std[self.input_std == 0] = 1
         
         # Global normalization for prediction inputs
-        outputs_all = df.iloc[:, 43:63]
+        outputs_all = df.iloc[:, self.output_start:self.output_end]
         self.output_mean = outputs_all.mean(axis=0)
         self.output_std = outputs_all.std(axis=0)
         self.output_std[self.output_std == 0] = 1
@@ -58,21 +64,21 @@ class GroupedSequenceDataset(Dataset):
         # Build groups: one DataFrame per (subject, condition)
         self.groups: Dict[Tuple, pd.DataFrame] = {}
         for key, g in df.groupby([subject_col, condition_col], sort=False):
-            # g = g.sort_values(self.time_col).reset_index(drop=True)
             g = g.sort_index().reset_index(drop=True)
             
-            PAE_input = g.iloc[:, 0:21].to_numpy(dtype=np.float64, copy=True)
-            X = g.iloc[:, 0:43].to_numpy(dtype=np.float64, copy=True)
-            Y = g.iloc[:, 43:63].to_numpy(dtype=np.float64, copy=True)
+            PAE_input = g.iloc[:, 21:42].to_numpy(dtype=np.float64, copy=True)
+            X = g.iloc[:, self.input_start:self.input_end].to_numpy(dtype=np.float64, copy=True)
+            Y = g.iloc[:, self.output_start:self.output_end].to_numpy(dtype=np.float64, copy=True)
 
             # normalize once
             X = (X - self.input_mean.values) / self.input_std.values
             Y = (Y - self.output_mean.values) / self.output_std.values
+            # PAE_input = X[:, 21:42] 
          
             self.groups[key] = {
-                "pae_in": PAE_input.astype(np.float32, copy=False),  # [N,21]
-                "mann_in": X.astype(np.float32, copy=False),          # [N,43]
-                "mann_out": Y.astype(np.float32, copy=False),         # [N,20]
+                "Autoencoder_input": PAE_input.astype(np.float32, copy=False),  # [N,21]
+                "Predictor_input": X.astype(np.float32, copy=False),          # [N,43]
+                "Predictor_output": Y.astype(np.float32, copy=False),         # [N,20]
                 "length": X.shape[0],
             }
 
@@ -93,21 +99,22 @@ class GroupedSequenceDataset(Dataset):
 
         # Slice windows (no pandas, minimal allocation)
         # Shapes: [seq_len, F] / [pred_len, F]
-        PAE_input   = torch.tensor(group["pae_in"][s : s + self.seq_len].T)         # [21,Seq_length]
-        MANN_input  = torch.tensor(group["mann_in"][s : s + self.seq_len].T)            # [43,Seq_length]
-        MANN_output = torch.tensor(group["mann_out"][s + self.seq_len : s + self.total_len].T)    # [20,Pred_length]
+        Autoencoder_input   = torch.tensor(group["Autoencoder_input"][s : s + self.seq_len].T)       
+        Predictor_input  = torch.tensor(group["Predictor_input"][s : s + self.seq_len].T)      
+        Predictor_output = torch.tensor(group["Predictor_output"][s + self.seq_len : s + self.total_len].T) 
 
-        # Mean-center per feature
-        PAE_input = PAE_input - PAE_input.mean(dim=1, keepdim=True)
-
+        # Mean-center per feature for the autoencoder
+        Autoencoder_input = Autoencoder_input - Autoencoder_input.mean(dim=1, keepdim=True)
+        
+        # Meta data to understand whats going on - not used currently
         meta = {
             "subject": key[0],
             "condition": key[1],
             "start_idx": s,
             "group_key": key,
         }
-        # return PAE_input, MANN_input, MANN_output, meta
-        return PAE_input, MANN_input, MANN_output
+        # return Autoencoder_input, Predictor_input, Predictor_output, meta
+        return Autoencoder_input, Predictor_input, Predictor_output
 
 
 class GroupedBatchSampler(Sampler[List[int]]):
@@ -119,13 +126,11 @@ class GroupedBatchSampler(Sampler[List[int]]):
         batch_size: int,
         shuffle: bool = True,
         drop_last: bool = False,
-        generator: Optional[torch.Generator] = None,
     ):
         self.dataset = dataset
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.drop_last = drop_last
-        self.generator = generator
 
         # bucket dataset indices by group
         buckets = defaultdict(list)
@@ -136,10 +141,8 @@ class GroupedBatchSampler(Sampler[List[int]]):
 
     def __iter__(self):
         rng = random.Random()
-        if self.generator is not None:
-            # seed = int(torch.randint(0, 2**31 - 1, (1,), generator=self.generator).item())
-            seed = 42
-            rng.seed(seed)
+        seed = 42
+        rng.seed(seed)
 
         keys = self.group_keys[:]
         if self.shuffle:

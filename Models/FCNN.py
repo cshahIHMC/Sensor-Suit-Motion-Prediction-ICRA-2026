@@ -10,11 +10,15 @@ import torch.nn as nn
 # It takes in the input of the num of layers, num of hidden units and
 # dropout Rate
 class FCNN(nn.Module):
-    def __init__(self, inputs, outputs, numOfLayers, hiddenDimension, dropoutRate=0.0):
+    def __init__(self, inputs, outputs, numOfLayers, hiddenDimension, input_seq_len=1, predictionHorizon=1, dropoutRate=0.2):
         super(FCNN, self).__init__()
         
+        self.input_seq_len = input_seq_len  
+        self.prediction_horizon = predictionHorizon
+        self.output_dim = outputs
+        
         # Initilize the first layer
-        self.layers = nn.ModuleList([nn.Linear(inputs, hiddenDimension)])
+        self.layers = nn.ModuleList([nn.Linear(inputs * self.input_seq_len, hiddenDimension)])
         # self.layers.append(nn.Dropout(p=dropoutRate))
         
         # Iterate over and add all the hidden layers
@@ -25,7 +29,7 @@ class FCNN(nn.Module):
         self.dropout = nn.Dropout(p=dropoutRate)
         
         # Add the output Layer
-        self.layers.append(nn.Linear(hiddenDimension, outputs))
+        self.layers.append(nn.Linear(hiddenDimension, self.output_dim * self.prediction_horizon))
         
     def forward(self, x):
         
@@ -35,6 +39,10 @@ class FCNN(nn.Module):
         
         # No activation on the output layer
         x = self.layers[-1](x)
+        
+        # Reshape to (batch, horizon, output_dim)
+        x = x.view(x.size(0), self.output_dim, self.prediction_horizon)
+        x = x.squeeze(-1)  # Remove the horizon dimension if it's 1
         
         return x
         
