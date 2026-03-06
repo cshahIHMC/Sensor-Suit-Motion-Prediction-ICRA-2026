@@ -19,6 +19,7 @@ from Models import PAE
 from Models.MANN import Model
 from Models.TCNN_MOE import MANN_TCN_DynamicWeights, MANN_TCN_DynamicWeights_Forecast
 from Models.FCNN import FCNN
+from Models.LSTM import LSTM
 
 ## Training Function
 def train_predictor_model(model, config, training_dataloader, validation_dataloader, tcnn=False, log_wandB=False):   
@@ -51,6 +52,7 @@ def train_predictor_model(model, config, training_dataloader, validation_dataloa
     
     ## Training Loop
     for epoch in range(epochs):
+        model.train()
     
         running_loss = 0.0
     
@@ -453,24 +455,24 @@ def main():
     
     # Logging Flag
     # Plot Flag
-    log_wandB = False
+    log_wandB = True
     train_model_flag = True
-    save_file = False
+    save_file = True
     future_forcast = False
     collect_phase = False
     
-    time_horizon_prediction = 1 # Can be 1, 5, 20, 50, 80, 100
+    time_horizon_prediction = 100 # Can be 1, 5, 20, 50, 80, 100
     
     if time_horizon_prediction != 1:
         future_forcast = True
     
-    model_to_train = "FCNN_SW" # Can be "MANN", "MoETCNN", "PAE", "RNN" 
+    model_to_train = "LSTM" # Can be "MANN", "MoETCNN", "PAE", "RNN" 
     
     if save_file:
         print("Saving the model after training !!!")
     
     # Data Setup
-    data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/AB01_req_data.csv"
+    data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/9_subjects_req_data.csv"
     
     # Model File to load
     pae_model_file_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20260212_0245_PAE on SS Dataset - 10 Subjects - 200 epochs (256 batch size).pth"
@@ -483,7 +485,7 @@ def main():
     config = {
         "training_tag": file_name,
         "project_name": project_name,
-        "epochs": 1,
+        "epochs": 50,
         "batch_size": 128,
         "num_workers": 8,
         "momentum":0.9,
@@ -645,6 +647,15 @@ def main():
                                         tcn_dropout=0.2,
                                         gating_dropout=0.2))
             
+    elif model_to_train == "LSTM":
+            
+            model = utility.ToDevice(LSTM(input_size=46,
+                                          hidden_size=256,
+                                          num_layers=3,
+                                          output_size=20,
+                                          pred_horizon=time_horizon_prediction,
+                                          dropout=0.4))
+            
     if train_model_flag:
         
         
@@ -681,6 +692,12 @@ def main():
                                                        validation_dataloader=val_loader, PAE_model=PAE_model, tcnn=True, log_wandB=log_wandB, collect_phase=collect_phase)
             
             print("Trained the model succesfully - plotting will probably fail")
+            
+        elif model_to_train == "LSTM":
+            
+            # Train
+            train_loss, val_loss = train_predictor_model(model=model, config=config, training_dataloader=train_loader, 
+                                                       validation_dataloader=val_loader, tcnn=True, log_wandB=log_wandB) 
             
         
         
@@ -788,7 +805,21 @@ def main():
             utility.plot_MANN_predictions(train_loader_plot, PAE_model, model, df.columns[46:66], tcnn=True)
             utility.plot_MANN_predictions(val_loader_plot, PAE_model, model, df.columns[46:66], tcnn=True)
         plt.show()
+    elif model_to_train == "LSTM":
         
+        # pass
+        if future_forcast:
+            
+            utility.stats_predictor_cal(train_loader_plot, model, df.columns[46:66])
+            # utility.plot_predictor_results(train_loader_plot, model, df.columns[46:66], window=time_horizon_prediction)
+
+            utility.stats_predictor_cal(val_loader_plot, model, df.columns[46:66])
+            # utility.plot_predictor_results(val_loader_plot, model, df.columns[46:66], window=time_horizon_prediction)            
+            
+        else:            
+            utility.plot_prediction(train_loader_plot, model, df.columns[46:66], tcnn=True)
+            utility.plot_prediction(val_loader_plot, model, df.columns[46:66], tcnn=True)
+        plt.show()   
         
     return 0
         
