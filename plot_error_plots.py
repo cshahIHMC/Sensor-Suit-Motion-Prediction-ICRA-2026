@@ -1,8 +1,11 @@
-############# Author -Chinmay Shah ##################
+"""
+Loads trained PAE/TCNN/MANN/FCNN checkpoints and computes per-joint MAE/STD/RMSE
+statistics at a fixed prediction horizon `k`, for paper result tables.
 
-# Train Predictor
-## Imports
-import wandb
+Author: Chinmay Shah
+Institution: Institute for Human and Machine Cognition (IHMC) / University of West Florida (UWF)
+"""
+
 from Library import utility
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -17,10 +20,16 @@ from Models.TCNN_MOE import MANN_TCN_DynamicWeights
 from Models import PAE
 import torch
 import torch.nn as nn
+import os
 from datetime import datetime
+
+# Repo root (folder this file lives in) - used so the default paths below work
+# regardless of where the repository is cloned.
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def col_2_extract():
+    """Return the ordered list of IMU/kinematic/velocity feature and label columns used by this script."""
     
     cols = ["Pelvis_V_GYROX", "Pelvis_V_GYROY", "Pelvis_V_GYROZ",
             "LThigh_V_GYROX", "LThigh_V_GYROY", "LThigh_V_GYROZ",
@@ -55,6 +64,8 @@ def col_2_extract():
 
 def stats_calc(dataloader, PAE_model, TCNN_model, MANN_TCNN, FCNN_model, col_names,
                  k, model_str = "MANN"):
+    """Run the model selected by `model_str` ("MANN", "TCNN", or "FCNN") over `dataloader`
+    at prediction step `k` and print per-joint MAE, STD, RMSE, and R^2 in original units."""
     TCNN_model.eval()
     PAE_model.eval()
     MANN_TCNN.eval()
@@ -252,17 +263,17 @@ def stats_calc(dataloader, PAE_model, TCNN_model, MANN_TCNN, FCNN_model, col_nam
 def main():
     
         # Data setup
-    data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/all_subjects_req_sim_data.csv"
-    
-    test_data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/test_subjects_req_sim_data.csv"
-    
+    data_path = os.path.join(BASE_DIR, "Data", "all_subjects_req_sim_data.csv")
+
+    test_data_path = os.path.join(BASE_DIR, "Data", "test_subjects_req_sim_data.csv")
+
     # Locomotion mode wise
-    # test_data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/Testing/Turn_step_req_sim_data.csv"
-    
-    PAE_model_file = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20250904_1754_PAE training Scherpeel Dataset - 10 Subjects 10 Phases - 40 epochs.pth"
-    MANN_TCNN_model_file = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/MANN TCNN_2.pth"
-    TCNN_model_file = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20250911_0348_Predictor training Scherpeel Dataset - all subjects -  1 step prediction (random k prediction) - TCNModel(44,20,[64, 128, 128, 256, 64],4,0.2).pth"
-    FCNN_model_file = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/FCNN-SW.pth"
+    # test_data_path = "<repo>/Data/Testing/Turn_step_req_sim_data.csv"
+
+    PAE_model_file = os.path.join(BASE_DIR, "Saved Models", "20250904_1754_PAE training Scherpeel Dataset - 10 Subjects 10 Phases - 40 epochs.pth")
+    MANN_TCNN_model_file = os.path.join(BASE_DIR, "Saved Models", "MANN TCNN_2.pth")
+    TCNN_model_file = os.path.join(BASE_DIR, "Saved Models", "20250911_0348_Predictor training Scherpeel Dataset - all subjects -  1 step prediction (random k prediction) - TCNModel(44,20,[64, 128, 128, 256, 64],4,0.2).pth")
+    FCNN_model_file = os.path.join(BASE_DIR, "Saved Models", "FCNN-SW.pth")
     
     df = pd.read_csv(test_data_path)
     

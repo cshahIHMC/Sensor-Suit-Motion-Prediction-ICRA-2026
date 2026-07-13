@@ -1,9 +1,22 @@
-############# Author -Chinmay Shah ##################
+"""
+Main training entry point for the sensor-suit motion prediction models.
 
-# Train Predictor
-## Imports
+`main()` selects one of the supported architectures via the `model_to_train` flag
+("PAE", "MANN", "MoETCNN", "TCNN", "FCNN_SW", "LSTM"), builds the train/validation
+dataloaders from the combined dataset CSV (see DataLoader/data_loader_pae.py),
+trains the model (optionally logging to Weights & Biases), saves the trained
+weights + config to `Saved Models/`, and generates evaluation plots/statistics.
+
+Update `data_path`, `pae_model_file_path`, and `model_file_path` in `main()` to
+point at your local dataset/checkpoint locations before running (see README).
+
+Author: Chinmay Shah
+Institution: Institute for Human and Machine Cognition (IHMC) / University of West Florida (UWF)
+"""
+
 from datetime import datetime
 import json
+import os
 import wandb
 import pandas as pd
 from Library import utility
@@ -21,9 +34,15 @@ from Models.TCNN_MOE import MANN_TCN_DynamicWeights, MANN_TCN_DynamicWeights_For
 from Models.FCNN import FCNN
 from Models.LSTM import LSTM
 
-## Training Function
-def train_predictor_model(model, config, training_dataloader, validation_dataloader, tcnn=False, log_wandB=False):   
-    
+# Repo root (folder this file lives in) - used so the default paths below work
+# regardless of where the repository is cloned.
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def train_predictor_model(model, config, training_dataloader, validation_dataloader, tcnn=False, log_wandB=False):
+    """Train a direct motion predictor (TCNN, FCNN_SW, or LSTM) with Adam + MSE loss,
+    validating each epoch and optionally logging to Weights & Biases."""
+
     ## Setting up an optimizer and a loss function - Original Paper used a AdamWr optimizer We using a simple SGD
     learning_rate = config["lr"]
     momentum = config["momentum"]
@@ -105,8 +124,8 @@ def train_predictor_model(model, config, training_dataloader, validation_dataloa
     return training_losses, validation_losses  
 
   
-# Function to calculate the PAE validation loss
 def calc_val_loss(model, validation_dataloader, lossFn, tcnn=False, lossFn_no_reduction=None):
+    """Compute mean validation loss for a direct motion predictor (TCNN/FCNN_SW/LSTM)."""
     model.eval()
     
     val_loss = 0.0
@@ -144,9 +163,9 @@ def calc_val_loss(model, validation_dataloader, lossFn, tcnn=False, lossFn_no_re
 
     return val_loss
 
-## Training Function
 def train_PAE_model(model, config, training_dataloader, validation_dataloader, log_wandB=False):
-    
+    """Train the Periodic Autoencoder (PAE) as a signal-reconstruction task with Adam + MSE loss."""
+
     ## Setting up an optimizer and a loss function - Original Paper used a AdamWr optimizer We using a simple SGD
     learning_rate = config["lr"]
     
@@ -221,6 +240,7 @@ def train_PAE_model(model, config, training_dataloader, validation_dataloader, l
     return training_losses, validation_losses
 
 def cal_PAE_val_loss(model, validation_dataloader, lossFn, lossFn_no_reduction):
+    """Compute mean PAE reconstruction validation loss."""
     model.eval()
     
     val_loss = 0.0
@@ -266,8 +286,12 @@ def cal_PAE_val_loss(model, validation_dataloader, lossFn, lossFn_no_reduction):
         
     return val_loss
 
-def train_MANN_model(model, config, training_dataloader, validation_dataloader, PAE_model, tcnn=False, log_wandB=False, collect_phase=False):   
-    
+def train_MANN_model(model, config, training_dataloader, validation_dataloader, PAE_model, tcnn=False, log_wandB=False, collect_phase=False):
+    """Train the MANN or MoE-TCN predictor: freezes a pretrained PAE_model to derive
+    phase-based gating inputs each step, then trains `model` with Adam + MSE loss.
+    If `collect_phase` is set, only accumulates phase-feature statistics and returns early
+    (used to compute normalization stats, not for actual training)."""
+
     if collect_phase:
         all_phases = []
         
@@ -394,8 +418,8 @@ def train_MANN_model(model, config, training_dataloader, validation_dataloader, 
             
     return training_losses, validation_losses  
 
-# Function to calculate the PAE validation loss
 def calc_MANN_val_loss(model, PAE_model, validation_dataloader, lossFn, tcnn=False, lossFn_no_reduction=None):
+    """Compute mean validation loss for the MANN/MoE-TCN predictor, gated by the frozen PAE_model."""
     model.eval()
     PAE_model.eval()
     
@@ -452,7 +476,11 @@ def calc_MANN_val_loss(model, PAE_model, validation_dataloader, lossFn, tcnn=Fal
     return val_loss
 
 def main():
-    
+    """Configure, build, train (or load), and evaluate one motion-prediction model.
+
+    Edit the flags/paths below to choose the model, prediction horizon, and dataset
+    location, then run this file directly: `python network_training.py`.
+    """
     # Logging Flag
     # Plot Flag
     log_wandB = True
@@ -466,26 +494,35 @@ def main():
     if time_horizon_prediction != 1:
         future_forcast = True
     
-    model_to_train = "LSTM" # Can be "MANN", "MoETCNN", "PAE", "RNN" 
+    model_to_train = "MoETCNN" # Can be "MANN", "MoETCNN", "PAE", "RNN" 
     
     if save_file:
         print("Saving the model after training !!!")
     
     # Data Setup
-    data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/9_subjects_req_data.csv"
-    
+    # Defaults to the small single-subject sample CSV bundled with the repo
+    # (Data - Second Skin/Testing/sample_data.csv, subject AB01) so this script
+    # runs out of the box. TODO: once you've downloaded the full dataset and run
+    # data_extraction.py (see README), point this at your full multi-subject CSV
+    # (e.g. "9_subjects_req_data.csv") for real training runs.
+    data_path = os.path.join(BASE_DIR, "Data - Second Skin", "Testing", "sample_data.csv")
+
     # Model File to load
-    pae_model_file_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20260212_0245_PAE on SS Dataset - 10 Subjects - 200 epochs (256 batch size).pth"
-    model_file_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20260219_1302_MANN model for robot deployment .pth"
+    # TODO: replace this filename with your own trained PAE checkpoint (only needed
+    # for model_to_train = "MANN" / "MoETCNN", which gate on a pretrained PAE).
+    pae_model_file_path = os.path.join(BASE_DIR, "Saved Models", "20260212_0245_PAE on SS Dataset - 10 Subjects - 200 epochs (256 batch size).pth")
+    # TODO: replace this filename with your own trained checkpoint (only used when
+    # train_model_flag = False, to load a model instead of training one).
+    model_file_path = os.path.join(BASE_DIR, "Saved Models", "20260219_1302_MANN model for robot deployment .pth")
     
     file_name = model_to_train +" for final Paper test k = " + str(time_horizon_prediction)
-    project_name = "ICRA 2026-GATech-Dataset"
+    project_name = "IROS-2026-Second-Skin-Dataset-Project"
     
     # Config the configurations
     config = {
         "training_tag": file_name,
         "project_name": project_name,
-        "epochs": 50,
+        "epochs": 1,
         "batch_size": 128,
         "num_workers": 8,
         "momentum":0.9,
@@ -562,10 +599,14 @@ def main():
                                         dropout=0.2))
 
     elif model_to_train == "PAE":
+        # input_channels must match the PAE_input width sliced in
+        # DataLoader/data_loader_pae.py (g.iloc[:, 21:42] -> 21 channels), and
+        # intermediate_channels=16 matches the "MANN"/"MoETCNN" PAE config below
+        # so a single trained PAE checkpoint can be reused across all three.
         model = utility.ToDevice(PAE.Model(
-                              input_channels=15,
+                              input_channels=21,
                               embedding_channels=10,
-                              intermediate_channels=12,
+                              intermediate_channels=16,
                               time_range=201,
                               window=1.0
                              ))
@@ -609,19 +650,22 @@ def main():
             
                         
         ## Load PAE file
+        # input_channels/intermediate_channels must match the checkpoint at
+        # pae_model_file_path (same PAE config as the "MANN" branch above -
+        # see the "PAE" branch for why 21/16 is correct).
         weights = torch.load(pae_model_file_path, weights_only=True)
         PAE_model = utility.ToDevice(PAE.Model(
-                          input_channels=15,
+                          input_channels=21,
                           embedding_channels=10,
-                          intermediate_channels=12,
+                          intermediate_channels=16,
                           time_range=201,
                           window=1.0
                          ))
-    
+
         PAE_model.load_state_dict(weights)
-        
+
         if future_forcast:
-            
+
             model = utility.ToDevice(MANN_TCN_DynamicWeights_Forecast(
                                         input_size=46,
                                         output_size=20,
@@ -704,7 +748,9 @@ def main():
         
         if save_file:
             # Save the Model
-            model_save_location = "Saved Models/"  + datetime.now().strftime('%Y%m%d_%H%M') + "_" + config["training_tag"] + ".pth"
+            saved_models_dir = os.path.join(BASE_DIR, "Saved Models")
+            os.makedirs(saved_models_dir, exist_ok=True)
+            model_save_location = os.path.join(saved_models_dir, datetime.now().strftime('%Y%m%d_%H%M') + "_" + config["training_tag"] + ".pth")
             torch.save(model.state_dict(), model_save_location)
             
             model_dict = {
@@ -731,7 +777,7 @@ def main():
                 }
 
 
-            model_save_location = "Saved Models/"  + datetime.now().strftime('%Y%m%d_%H%M') + "_" + config["training_tag"]
+            model_save_location = os.path.join(saved_models_dir, datetime.now().strftime('%Y%m%d_%H%M') + "_" + config["training_tag"])
             with open(model_save_location + '.json', 'w') as file:
                 json.dump(model_dict, file, indent=4)
         
@@ -760,8 +806,10 @@ def main():
         plt.show()
         
     elif model_to_train == "PAE":
-        utility.plot_PAE_recon(train_loader_plot, model, config["seq_length"], df.columns[15:30])
-        utility.plot_PAE_recon(val_loader_plot, model, config["seq_length"], df.columns[15:30])
+        # Label columns must match the 21-channel PAE_input slice (df columns 21:42)
+        # used by GroupedSequenceDataset - plot_PAE_recon assumes 21 channels.
+        utility.plot_PAE_recon(train_loader_plot, model, config["seq_length"], df.columns[21:42])
+        utility.plot_PAE_recon(val_loader_plot, model, config["seq_length"], df.columns[21:42])
         plt.show()
         
     elif model_to_train == "MANN":

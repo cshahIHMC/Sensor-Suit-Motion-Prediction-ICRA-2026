@@ -1,10 +1,22 @@
+"""
+Loads a trained checkpoint (TCNN, FCNN_SW, MANN, MoETCNN, or LSTM) and a held-out
+test-subject CSV, then evaluates per-joint prediction statistics at a given
+prediction horizon. Used to generate the final test-set results reported in the
+paper.
 
+Update `model_file_path` (and the paths inside `run_list`) to point at your local
+checkpoint/data locations before running (see README).
+
+Author: Chinmay Shah
+Institution: Institute for Human and Machine Cognition (IHMC) / University of West Florida (UWF)
+"""
 
 from Library import utility
 import torch
 import torch.nn as nn
 import pandas as pd
 import numpy as np
+import os
 from DataLoader.data_loader_pae import GroupedBatchSampler, GroupedSequenceDataset
 from torch.utils.data import Dataset, DataLoader, Subset
 from Models import PAE
@@ -15,10 +27,13 @@ from Models.TCNN import TCNModel, TCNModel_Forecast
 from Models.LSTM import LSTM
 import matplotlib.pyplot as plt
 
+# Repo root (folder this file lives in) - used so the default paths below work
+# regardless of where the repository is cloned.
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-model_file_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20260302_1550_MANN for final Paper test Abalation MANN without expert weights k = 100.pth"
-# pae_model_file_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20260212_0245_PAE on SS Dataset - 10 Subjects - 200 epochs (256 batch size).pth"
-# data_file_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/test_subject_req_data.csv"
+model_file_path = os.path.join(BASE_DIR, "Saved Models", "20260302_1550_MANN for final Paper test Abalation MANN without expert weights k = 100.pth")
+# pae_model_file_path = "<repo>/Saved Models/20260212_0245_PAE on SS Dataset - 10 Subjects - 200 epochs (256 batch size).pth"
+# data_file_path = "<repo>/Data - Second Skin/Testing/test_subject_req_data.csv"
 # prediction_horizon = 100
 
 
@@ -28,19 +43,26 @@ model_file_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-202
 
 # List of models for k evaluation
 # model_list = {
-#     1 : "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20260224_1938_LSTM for final Paper test k = 1.pth",
-#     5 : "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20260225_0052_LSTM for final Paper test k = 5.pth",
-#     20: "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20260225_0607_LSTM for final Paper test k = 20.pth",
-#     50: "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20260225_1321_LSTM for final Paper test k = 50.pth",
-#     80: "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20260225_1836_LSTM for final Paper test k = 80.pth",
-#     100: "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20260225_2350_LSTM for final Paper test k = 100.pth"
+#     1 : "<repo>/Saved Models/20260224_1938_LSTM for final Paper test k = 1.pth",
+#     5 : "<repo>/Saved Models/20260225_0052_LSTM for final Paper test k = 5.pth",
+#     20: "<repo>/Saved Models/20260225_0607_LSTM for final Paper test k = 20.pth",
+#     50: "<repo>/Saved Models/20260225_1321_LSTM for final Paper test k = 50.pth",
+#     80: "<repo>/Saved Models/20260225_1836_LSTM for final Paper test k = 80.pth",
+#     100: "<repo>/Saved Models/20260225_2350_LSTM for final Paper test k = 100.pth"
 # }
 
 
 def run_list(model_file_path, prediction_horizon, model_name):
-    
-    pae_model_file_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20260212_0245_PAE on SS Dataset - 10 Subjects - 200 epochs (256 batch size).pth"
-    data_file_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/test_subject_all_data.csv"
+    """Load `model_name`'s checkpoint at `model_file_path`, run it on the held-out test
+    subject data at `prediction_horizon`, and print/plot the resulting statistics."""
+
+    pae_model_file_path = os.path.join(BASE_DIR, "Saved Models", "20260212_0245_PAE on SS Dataset - 10 Subjects - 200 epochs (256 batch size).pth")
+    # Defaults to the bundled single-subject sample (same file used as the default
+    # training CSV in network_training.py) so this runs out of the box - note this
+    # means "test" and "train" are the same subject here, so results are only a
+    # smoke test, not a true held-out evaluation. TODO: point this at a real
+    # held-out test-subject CSV (produced by data_extraction.py) for actual results.
+    data_file_path = os.path.join(BASE_DIR, "Data - Second Skin", "Testing", "sample_data.csv")
 
     future_forcast = False
     

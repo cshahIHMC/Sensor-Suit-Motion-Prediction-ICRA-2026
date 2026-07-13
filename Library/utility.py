@@ -1,3 +1,13 @@
+"""
+Shared helper functions used across training and evaluation scripts: moving tensors
+to/from the GPU, splitting/grouping the dataset by subject or (subject, condition),
+plotting predictions and PAE signal reconstructions, and computing per-joint
+MAE/RMSE statistics.
+
+Author: Chinmay Shah
+Institution: Institute for Human and Machine Cognition (IHMC) / University of West Florida (UWF)
+"""
+
 import torch
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -5,16 +15,16 @@ from typing import List, Tuple, Dict
 import numpy as np
 from itertools import islice
 
-### Contains all helper functions
 
-# Check if the GPU is available and put the object on the GPU
 def ToDevice(x):
+    """Move a tensor to the GPU if one is available, otherwise leave it on the CPU."""
     return x.cuda() if torch.cuda.is_available() else x
 
-# To detach from the GPU
+
 def Item(value):
-        return value.detach().cpu()
-    
+    """Detach a tensor from the graph and move it to the CPU."""
+    return value.detach().cpu()
+
 
 def plot_all_columns(df: pd.DataFrame, max_cols: int = None):
     """
@@ -125,8 +135,9 @@ def split_pairs_train_val(pairs: List[Tuple[str, str]],
     return train_pairs, val_pairs
 
 
-# This function is to plot ploredictions - 1 Time step in the future
 def plot_prediction(dataloader, model, col_names, tcnn=False, plot_save_name=None):
+    """Run a single-step-ahead FCNN/TCNN model over `dataloader`, print per-joint MAE/STD/RMSE,
+    and plot predicted vs. ground-truth trajectories for every joint channel."""
     model.eval()
     
     ground_truth = []
@@ -244,6 +255,7 @@ def plot_train_val_loss(train_losses, val_losses):
     
     
 def plot_PAE_recon(dataloader, model, seq_length, col_names):
+    """Plot the PAE model's reconstructed signal against the input IMU signal, per channel."""
     model.eval()
     fig, axs = plt.subplots(3, 7, figsize=(30,10), sharex=True, sharey=True)
     
@@ -298,8 +310,9 @@ def plot_PAE_recon(dataloader, model, seq_length, col_names):
     # plt.show()
     
 
-# Plot MANN Predictions vs Ground Truth
 def plot_MANN_predictions(dataloader, PAE_model, model, col_names, tcnn=False):
+    """Feed IMU windows through the PAE model to get phase parameters, use them to gate the
+    MANN/MoE-TCN predictor, then plot predicted vs. ground-truth joint trajectories."""
     model.eval()
         
     ground_truth = []
@@ -415,7 +428,8 @@ def plot_MANN_predictions(dataloader, PAE_model, model, col_names, tcnn=False):
         
         
 def plot_predictor_results(dataloader, model, col_names, window, PAE_model=None, moe_tcnn=False, mann=False, fcnn_sw=False):
-     
+    """Plot predicted vs. ground-truth joint angle/moment trajectories for any of the
+    supported predictor models (MoE-TCN, MANN, FCNN sliding-window, or plain TCNN)."""
     model.eval()
     fig1, axs1 = plt.subplots(2, 5, figsize=(30,10), sharey=True, sharex=True)
     fig2, axs2 = plt.subplots(2, 5, figsize=(30,10), sharey=True, sharex=True)
@@ -533,7 +547,8 @@ def plot_predictor_results(dataloader, model, col_names, window, PAE_model=None,
     plt.show()            
                 
 def stats_predictor_cal(dataloader, model, col_names, PAE_model=None, moe_tcnn=False, mann=False, fcnn_sw=False):
-    
+    """Run any of the supported predictor models over `dataloader` and print per-joint
+    MAE, STD, and RMSE (in original, unnormalized units) accumulated over the full multi-step horizon."""
     model.eval()
     
     out_std = torch.as_tensor(dataloader.dataset.output_std, dtype=torch.float64)  # [F]

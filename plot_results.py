@@ -1,9 +1,12 @@
+"""
+Bar/line chart generator that hardcodes the final MAE/RMSE result numbers (across
+prediction horizons k = 1, 5, 20, 50, 80, 100) reported in the paper, and plots
+them for the PAE-MoENN, TCNN, FCNN-SW, and LSTM baselines.
 
-############# Author -Chinmay Shah ##################
+Author: Chinmay Shah
+Institution: Institute for Human and Machine Cognition (IHMC) / University of West Florida (UWF)
+"""
 
-# Train Predictor
-## Imports
-import wandb
 from Library import utility
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -22,9 +25,9 @@ from datetime import datetime
 
 
 
-
-
 def main():
+    """Plot RMSE-vs-prediction-horizon curves for joint angles and joint moments
+    using the hardcoded result values below (update these if results change)."""
 
     K = [1,5,20,50,80,100]
     
@@ -141,8 +144,8 @@ def main():
     
     
 #     # Load data
-# # data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Walking_bio_torque_new.csv"
-# data_path_2 = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/squatting_bio_torque_new.csv"
+# # data_path = "<repo>/Data - Second Skin/Walking_bio_torque_new.csv"
+# data_path_2 = "<repo>/Data - Second Skin/squatting_bio_torque_new.csv"
 # df = pd.read_csv(data_path_2)
     
 # # ---- SETTINGS ----

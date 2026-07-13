@@ -1,3 +1,15 @@
+"""
+PyTorch Dataset/Sampler used to feed the PAE, MANN, and TCN(N)-MoE models.
+
+Builds fixed-length sliding windows over the combined dataset CSV, keeping every
+window inside a single (subject, condition) trial, and splits each window into the
+PAE (phase autoencoder) input, the motion-predictor input, and the future
+motion-predictor target.
+
+Author: Chinmay Shah
+Institution: Institute for Human and Machine Cognition (IHMC) / University of West Florida (UWF)
+"""
+
 from torch.utils.data import Dataset, DataLoader, Sampler
 import torch
 import pandas as pd

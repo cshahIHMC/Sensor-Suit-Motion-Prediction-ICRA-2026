@@ -1,15 +1,18 @@
-## Author - Chinmay Shah
-# Simple FCNN model setup file
+"""
+Fully-connected sliding-window baseline predictor (FCNN_SW). Flattens a window of
+past IMU/kinematic input features and directly regresses the joint angle/moment
+targets for one or more future timesteps.
 
+Author: Chinmay Shah
+Institution: Institute for Human and Machine Cognition (IHMC) / University of West Florida (UWF)
+"""
 
 import torch
 import torch.nn as nn
 
 
-# Setting up a simple NN model with 31 inputs and 6 outputs
-# It takes in the input of the num of layers, num of hidden units and
-# dropout Rate
 class FCNN(nn.Module):
+    """Feed-forward baseline: flattened input window -> hidden MLP -> (output_dim x prediction_horizon)."""
     def __init__(self, inputs, outputs, numOfLayers, hiddenDimension, input_seq_len=1, predictionHorizon=1, dropoutRate=0.2):
         super(FCNN, self).__init__()
         

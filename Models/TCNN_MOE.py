@@ -1,10 +1,25 @@
+"""
+Dynamic-weight TCN Mixture-of-Experts predictor (the "MoETCNN" model used for
+training/evaluation in network_training.py). A PAE-phase-driven gating network
+(as in Models/MANN.py) produces per-sample expert weights that blend TCN
+convolution kernels directly, so the gate reshapes the TCN's effective weights
+per sample rather than only blending expert outputs. See
+Models/TCNN_MOE_Additional.py for earlier output-blended / shared-body MoE
+variants and gating regularizers explored during development.
+
+Author: Chinmay Shah
+Institution: Institute for Human and Machine Cognition (IHMC) / University of West Florida (UWF)
+"""
+
 import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.parametrizations import weight_norm
 
+
 def Normalize(X, N):
+    """Normalize `X` using a (mean, std) pair `N`."""
     mean = N[0]
     std = N[1]
     return (X - mean) / std
@@ -339,8 +354,8 @@ class MANN_TCN_DynamicWeights(nn.Module):
 
 class MANN_TCN_DynamicWeights_Forecast(nn.Module):
     """
-    End-to-end: GatingNet -> per-sample expert weights -> Expert TCN (all convs mixed)
-    This exactly matches: "gating network dynamically changes the weights of the TCN".
+    Same architecture as `MANN_TCN_DynamicWeights`, but the final linear head predicts
+    all `horizon` future timesteps in one forward pass instead of a single step.
     """
     def __init__(self,
                  input_size: int,

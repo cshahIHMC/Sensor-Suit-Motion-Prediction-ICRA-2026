@@ -1,3 +1,14 @@
+"""
+Scratch/testing utilities: standalone copies of the subject/condition grouping
+helpers and an alternate `GroupedSequenceDataset` (single-tensor window output,
+optional insole-channel normalization) used while iterating on the DataLoader
+design in DataLoader/data_loader_pae.py. Not imported by the main training
+pipeline.
+
+Author: Chinmay Shah
+Institution: Institute for Human and Machine Cognition (IHMC) / University of West Florida (UWF)
+"""
+
 import pandas as pd
 from typing import List, Tuple, Dict
 import numpy as np
@@ -6,10 +17,17 @@ from typing import List, Optional, Tuple, Dict, Iterable
 import torch
 from collections import defaultdict
 import random
+import os
+
+# Repo root (folder this file lives in) - used so the default paths below work
+# regardless of where the repository is cloned.
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 
 def extract_pairs(df: pd.DataFrame,
                   subject_col: str = "subject",
                   condition_col: str = "condition") -> Tuple[List[str], List[str], List[Tuple[str,str]]]:
+    """Return the unique subjects, unique conditions, and unique (subject, condition) pairs in `df`."""
     subjects   = df[subject_col].dropna().unique().tolist()
     conditions = df[condition_col].dropna().unique().tolist()
     pairs = list(
@@ -225,7 +243,7 @@ class GroupedBatchSampler(Sampler[List[int]]):
     
 
 def main():
-    df =pd.read_csv("/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/all_subjects_req_sim_data.csv")
+    df = pd.read_csv(os.path.join(BASE_DIR, "Data", "all_subjects_req_sim_data.csv"))
     print(df.shape)
     
     subjects, conditions, pairs = extract_pairs(df)

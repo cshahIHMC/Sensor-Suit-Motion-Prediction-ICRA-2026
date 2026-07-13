@@ -1,14 +1,24 @@
+"""
+Reads the per-subject GaTech dataset CSVs, downsamples them, tags each row with
+subject/condition metadata, selects the columns needed for training, and writes
+the combined result to a single CSV consumed by DataLoader/data_loader_pae.py.
 
-## This file reads from the GaTech Data set and writes it to a single csv.
+Author: Chinmay Shah
+Institution: Institute for Human and Machine Cognition (IHMC) / University of West Florida (UWF)
+"""
 
 import os
 import pandas as pd
 import csv
 
-# Downsampling function - down samples 1000Hz data to 200 Hz
+# Repo root (folder this file lives in) - used so the default paths below work
+# regardless of where the repository is cloned.
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 
 def downSample(df, downsamplingFactor):
-    
+    """Down-sample a DataFrame by keeping every `downsamplingFactor`-th row (e.g. 1000 Hz -> 200 Hz)."""
+
     df_downSampled = pd.DataFrame()
     
     for col in df:
@@ -20,8 +30,12 @@ def downSample(df, downsamplingFactor):
     
     return df_downSampled
 
-# Extracts and writes the data to an sql database fromm the Ryan and Christoph Dataset
 def extract_write_2_csv(dataDir, subject_list, dataWriteDir):
+    """
+    Walk each subject's condition folders under `dataDir`, concatenate their per-trial
+    CSVs, tag rows with subject/condition/anthropometric metadata, and write the
+    required columns (see `extract_req_data`) out to `dataWriteDir`.
+    """
 
     df_subjects = pd.DataFrame()
     
@@ -107,7 +121,8 @@ def extract_write_2_csv(dataDir, subject_list, dataWriteDir):
 
 
 def extract_req_data():
-    
+    """Return the list of IMU, anthropometric, kinematic, and kinetic columns needed for training."""
+
     # df = pd.read_csv(dataWriteDir)
     # print("All Data: ", df.shape)
 
@@ -176,12 +191,17 @@ def extract_req_data():
 
 
 def main():
-    data_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/OpenSource_Dataset/Data/"
+    """Extract the required columns for all listed subjects and write them to `data_req_dir`.
+
+    Update `data_dir`, `data_write_dir`, and `data_req_dir` below to point at your local
+    copy of the dataset before running (see README for setup instructions).
+    """
+    data_dir = os.path.join(BASE_DIR, "Data - Second Skin", "OpenSource_Dataset", "Data") + os.sep
     # sub_Name = "AB01/"
-    data_write_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/10_Subjects_all_data.csv"
-    
-    data_req_dir = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data - Second Skin/Testing/10_subjects_req_data.csv"
-    
+    data_write_dir = os.path.join(BASE_DIR, "Data - Second Skin", "Testing", "10_Subjects_all_data.csv")
+
+    data_req_dir = os.path.join(BASE_DIR, "Data - Second Skin", "Testing", "10_subjects_req_data.csv")
+
     # Subject Information - [Weight(kg), Height(m), Age(yrs), Sex(M-0 / F-1)]]
     sub_list = {
         "AB01/": [86.9, 1.75, 23, 0],   

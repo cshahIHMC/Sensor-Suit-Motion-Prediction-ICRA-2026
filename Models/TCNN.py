@@ -1,7 +1,17 @@
+"""
+Baseline Temporal Convolutional Network (TCN) predictor (Bai et al., "An Empirical
+Evaluation of Generic Convolutional and Recurrent Networks for Sequence Modeling",
+2018), used without PAE phase gating as a single-step and direct multi-horizon
+motion predictor.
+
+Author: Chinmay Shah
+Institution: Institute for Human and Machine Cognition (IHMC) / University of West Florida (UWF)
+"""
+
 import torch
 import torch.nn as nn
 from torch.nn.utils.parametrizations import weight_norm
- 
+
 # Chomp1d ensures the output length is the same as the input length after convolution.
 class Chomp1d(nn.Module):
     def __init__(self, chomp_size):
@@ -81,8 +91,8 @@ class TemporalConvNet(nn.Module):
         return self.network(x)
         # Final shape: (batch_size, num_channels[-1], sequence_length)
 
-# TCNModel includes the TCN and a final linear layer to map the output of the TCN to the desired output size.
 class TCNModel(nn.Module):
+    """TCN backbone + linear head predicting a single future timestep."""
     def __init__(self, input_size, output_size, num_channels, kernel_size=2, dropout=0.2):
         super(TCNModel, self).__init__()
         # Define the TCN part of the model.
@@ -100,6 +110,7 @@ class TCNModel(nn.Module):
         return out
 
 class TCNModel_Forecast(nn.Module):
+    """TCN backbone + linear head predicting all `horizon` future timesteps in one forward pass."""
     def __init__(self, input_size, output_size, horizon, num_channels, kernel_size=2, dropout=0.2):
         super(TCNModel_Forecast, self).__init__()
         # Define the TCN part of the model.

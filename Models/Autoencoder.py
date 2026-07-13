@@ -1,10 +1,16 @@
-## Author - Chinmay Shah
-# Simple Autoencoder setup using FCNN-style encoder and decoder
+"""
+Simple fully-connected autoencoder (FCNN-style encoder/decoder) used for general
+latent-space experimentation, separate from the PAE phase autoencoder.
+
+Author: Chinmay Shah
+Institution: Institute for Human and Machine Cognition (IHMC) / University of West Florida (UWF)
+"""
 
 import torch
 import torch.nn as nn
 
 class AutoEncoder(nn.Module):
+    """Fully-connected autoencoder: input_dim -> latent_dim -> output_dim."""
     def __init__(self, input_dim, output_dim, latent_dim, num_layers, hidden_dim, dropout_rate=0.0):
         super(AutoEncoder, self).__init__()
 

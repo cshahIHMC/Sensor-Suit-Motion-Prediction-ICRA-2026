@@ -4,7 +4,13 @@ __pycache__/
 
 # Ignore the Data folder
 Data/
-Data - Second Skin/
+
+# Ignore everything under "Data - Second Skin/" except the bundled single-subject
+# sample CSV, so the repo can ship a small example dataset for a quick start.
+Data - Second Skin/*
+!Data - Second Skin/Testing/
+Data - Second Skin/Testing/*
+!Data - Second Skin/Testing/sample_data.csv
 
 # Ignore the plots folder
 Plots/

@@ -1,21 +1,27 @@
-import math
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.nn.utils.parametrizations import weight_norm
-
 """
-Mode-Adaptive (Gated) Mixture-of-Experts for TCNs
-- Full MoE: multiple TCN experts, gate blends their predictions
+Mode-Adaptive (Gated) Mixture-of-Experts for TCNs - additional/exploratory variants.
+- Full MoE: multiple independent TCN experts, gate blends their predictions
 - SharedBody: single TCN trunk, gate blends expert output heads (parameter-efficient)
+- A second copy of the dynamic-weight (kernel-blending) TCN, kept for reference
+
+The model actually used for training/evaluation ("MoETCNN" in network_training.py)
+is `MANN_TCN_DynamicWeights[_Forecast]` in Models/TCNN_MOE.py; the variants here
+were exploratory alternatives and are not wired into the main training pipeline.
 
 Input conventions
 - seq_input: (B, C_in, T)
 - phaseinputs (gating inputs): (B, G)
 - output: (B, O)
 
-Drop this file into your project and import any of the classes below.
+Author: Chinmay Shah
+Institution: Institute for Human and Machine Cognition (IHMC) / University of West Florida (UWF)
 """
+
+import math
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.nn.utils.parametrizations import weight_norm
 
 # ------------------------------
 # Core TCN building blocks

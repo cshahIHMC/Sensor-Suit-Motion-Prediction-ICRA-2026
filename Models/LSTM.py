@@ -1,3 +1,13 @@
+"""
+LSTM baseline for direct multi-horizon motion prediction of hip/knee/ankle joint
+angles and moments. The active `LSTM` class below predicts the full future horizon
+in one forward pass; an earlier autoregressive variant is kept commented out below
+for reference.
+
+Author: Chinmay Shah
+Institution: Institute for Human and Machine Cognition (IHMC) / University of West Florida (UWF)
+"""
+
 # ## Author: Chinmay Shah
 # # LSTM Motion Prediction Model for Hip/Knee/Ankle Joint Angles and Moments
 
@@ -79,9 +89,6 @@
 #         predictions = predictions.squeeze(-1)
 #         return predictions
 
-
-## Author: Chinmay Shah
-# Direct Multi-Horizon LSTM Motion Prediction Model
 
 import torch
 import torch.nn as nn

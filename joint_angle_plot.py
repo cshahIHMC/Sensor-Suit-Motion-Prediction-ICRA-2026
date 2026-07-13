@@ -1,8 +1,11 @@
-############# Author -Chinmay Shah ##################
+"""
+Loads a trained PAE + MANN checkpoint pair and plots predicted vs. ground-truth
+joint angle trajectories over a fixed time window, for paper figures.
 
-# Train Predictor
-## Imports
-import wandb
+Author: Chinmay Shah
+Institution: Institute for Human and Machine Cognition (IHMC) / University of West Florida (UWF)
+"""
+
 from Library import utility
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -17,10 +20,16 @@ from Models.TCNN_MOE import MANN_TCN_DynamicWeights
 from Models import PAE
 import torch
 import torch.nn as nn
+import os
 from datetime import datetime
+
+# Repo root (folder this file lives in) - used so the default paths below work
+# regardless of where the repository is cloned.
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def col_2_extract():
+    """Return the ordered list of IMU/kinematic/velocity feature and label columns used by this script."""
     
     cols = ["Pelvis_V_GYROX", "Pelvis_V_GYROY", "Pelvis_V_GYROZ",
             "LThigh_V_GYROX", "LThigh_V_GYROY", "LThigh_V_GYROZ",
@@ -54,10 +63,12 @@ def col_2_extract():
     return cols
 
 def plot_results(dataloader, PAE_model, model, col_names, train_loader):
+    """Run the PAE + MANN model pair over `dataloader` and plot unnormalized hip-angle
+    predictions vs. ground truth for a fixed time window (used to generate paper figures)."""
     model.eval()
     PAE_model.eval()
     
-    # save_csv_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/params_normalization.csv"
+    # save_csv_path = "<repo>/Data/params_normalization.csv"
     
     k = 0
     ground_truth = []
@@ -248,17 +259,17 @@ def plot_results(dataloader, PAE_model, model, col_names, train_loader):
 def main():
     
         # Data setup
-    data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/all_subjects_req_sim_data.csv"
-    
-    test_data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/Testing/Step_ups_req_sim_data.csv"
-    
+    data_path = os.path.join(BASE_DIR, "Data", "all_subjects_req_sim_data.csv")
+
+    test_data_path = os.path.join(BASE_DIR, "Data", "Testing", "Step_ups_req_sim_data.csv")
+
     # Locomotion mode wise
-    # test_data_path = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Data/Testing/Turn_step_req_sim_data.csv"
-    
-    PAE_model_file = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20250904_1754_PAE training Scherpeel Dataset - 10 Subjects 10 Phases - 40 epochs.pth"
-    MANN_TCNN_model_file = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/MANN 1 Step.pth"
-    TCNN_model_file = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/20250911_0348_Predictor training Scherpeel Dataset - all subjects -  1 step prediction (random k prediction) - TCNModel(44,20,[64, 128, 128, 256, 64],4,0.2).pth"
-    FCNN_model_file = "/home/cshah/workspaces/Sensor-Suit-Motion-Prediction-ICRA-2026/Saved Models/FCNN-SW.pth"
+    # test_data_path = "<repo>/Data/Testing/Turn_step_req_sim_data.csv"
+
+    PAE_model_file = os.path.join(BASE_DIR, "Saved Models", "20250904_1754_PAE training Scherpeel Dataset - 10 Subjects 10 Phases - 40 epochs.pth")
+    MANN_TCNN_model_file = os.path.join(BASE_DIR, "Saved Models", "MANN 1 Step.pth")
+    TCNN_model_file = os.path.join(BASE_DIR, "Saved Models", "20250911_0348_Predictor training Scherpeel Dataset - all subjects -  1 step prediction (random k prediction) - TCNModel(44,20,[64, 128, 128, 256, 64],4,0.2).pth")
+    FCNN_model_file = os.path.join(BASE_DIR, "Saved Models", "FCNN-SW.pth")
     
     
     df_train = pd.read_csv(data_path)

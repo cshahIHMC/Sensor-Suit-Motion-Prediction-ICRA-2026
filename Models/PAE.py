@@ -1,3 +1,19 @@
+"""
+Periodic Autoencoder (PAE): a 1D-convolutional autoencoder that learns per-channel
+phase, frequency, amplitude, and offset parameters describing the periodicity of
+each IMU signal channel, and reconstructs the input signal from a sinusoidal latent
+representation built from those parameters. These phase parameters are used
+downstream to gate the MANN / MoE-TCN motion predictors.
+
+This model architecture is adapted from the Periodic Autoencoder introduced in:
+Sebastian Starke, Ian Mason, and Taku Komura, "DeepPhase: Periodic Autoencoders for
+Learning Motion Phase Manifolds", ACM Transactions on Graphics (SIGGRAPH 2022),
+41(4), Article 136. https://dl.acm.org/doi/10.1145/3528223.3530178
+
+Author: Chinmay Shah
+Institution: Institute for Human and Machine Cognition (IHMC) / University of West Florida (UWF)
+"""
+
 import numpy as np
 import torch
 from torch.nn.parameter import Parameter
@@ -5,6 +21,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class LN_v2(nn.Module):
+    """Feature-wise layer normalization with learnable scale/shift, applied along the time axis."""
     def __init__(self, dim, epsilon=1e-5):
         super().__init__()
         self.epsilon = epsilon
@@ -21,6 +38,8 @@ class LN_v2(nn.Module):
         return y
     
 class Model(nn.Module):
+    """Periodic Autoencoder: Conv1d encoder -> per-channel phase/frequency/amplitude/offset
+    extraction (via FFT + learned phase head) -> sinusoidal reconstruction -> Conv1d decoder."""
     def __init__(self, input_channels, embedding_channels, intermediate_channels, time_range, window):
         super(Model, self).__init__()
         self.input_channels = input_channels
@@ -47,8 +66,8 @@ class Model(nn.Module):
         self.denorm1 = LN_v2(time_range)
         self.deconv2 = nn.Conv1d(self.intermediate_channels, input_channels, time_range, stride=1, padding=int((time_range - 1) / 2), dilation=1, groups=1, bias=True, padding_mode='zeros')
 
-    #Returns the frequency for a function over a time window in s
     def FFT(self, function, dim):
+        """Return per-channel dominant frequency, amplitude, and DC offset of `function` over `dim`."""
         rfft = torch.fft.rfft(function, dim=dim)
         magnitudes = rfft.abs()
         spectrum = magnitudes[:,:,1:] #Spectrum without DC component
