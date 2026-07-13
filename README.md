@@ -56,29 +56,14 @@ The pipeline has two stages:
 ├── plot_results.py           # Plots RMSE-vs-horizon curves from the paper's result tables
 ├── stats_cal.py              # Evaluates a saved checkpoint on held-out test-subject data
 ├── test_functions.py         # Scratch/dev utilities used while building the DataLoader
-└── Data/, Data - Second Skin/, Saved Models/, wandb/, Plots/   # Git-ignored (see Dataset Setup),
-                                                                 # except the bundled sample_data.csv sample
+└── Data/, Data - Second Skin/, Saved Models/, wandb/, Plots/   # Git-ignored (see Dataset Setup)
 ```
 
 ## Dataset setup
 
-### Quick start with the bundled sample
-
-This repository ships a small sample dataset at
-`Data - Second Skin/Testing/sample_data.csv` — a single subject (AB01) already
-run through `data_extraction.py`, in the same combined-CSV format
-`network_training.py` expects. It's tracked in git as the one exception to the
-otherwise git-ignored `Data - Second Skin/` folder (see `.gitignore`). This lets
-you run the full training/evaluation pipeline immediately without downloading
-anything: `network_training.py`'s `data_path` defaults to this file. It's only
-one subject, so it's meant for smoke-testing the pipeline / sanity-checking a
-model architecture, not for reproducing the paper's reported results.
-
-### Using the full dataset
-
-Training data for the full multi-subject pipeline is **not** included in this
-repository (the `Data/` folder, and everything under `Data - Second Skin/`
-except the sample CSV above, are git-ignored). To reproduce the paper's results:
+Training data is **not** included in this repository (the `Data/`, `Data - Second
+Skin/`, and `Saved Models/` folders are git-ignored — see `.gitignore`). To
+reproduce the pipeline:
 
 1. **Download the dataset.** The wearable sensor-suit dataset used here ("Second
    Skin") is described in:
@@ -101,35 +86,24 @@ except the sample CSV above, are git-ignored). To reproduce the paper's results:
 3. **Build the combined training CSV.** `data_extraction.py` walks each subject's
    task folders, downsamples the signals, tags rows with subject/condition/
    anthropometric metadata, selects the required columns, and writes one combined
-   CSV (this is the same process used to produce the bundled `sample_data.csv`
-   sample, just across all subjects instead of one). By default it reads from
-   `Data - Second Skin/OpenSource_Dataset/Data/` and writes to
-   `Data - Second Skin/Testing/` (both resolved relative to the repo, wherever
-   it's cloned) — only edit the `data_dir` / `data_write_dir` / `data_req_dir`
-   variables at the top of `main()` if your local layout differs. Then run:
+   CSV. By default it reads from `Data - Second Skin/OpenSource_Dataset/Data/`
+   and writes to `Data - Second Skin/Testing/` (both resolved relative to the
+   repo, wherever it's cloned) — only edit the `data_dir` / `data_write_dir` /
+   `data_req_dir` variables at the top of `main()` if your local layout differs.
+   Then run:
 
    ```bash
    python data_extraction.py
    ```
 
-4. **Point the scripts at your full CSV.** `network_training.py`'s `data_path`
-   and `stats_cal.py`'s `data_file_path` both default to the single-subject
-   sample (`sample_data.csv`) described above (same Second-Skin `req_data`
-   column schema) — update them to your full multi-subject CSV (e.g.
-   `9_subjects_req_data.csv`) for real training/evaluation runs. Every such
-   data/checkpoint path in `network_training.py` is marked with a `# TODO:`
-   comment right above it — search for `TODO` in that file to find every spot
-   that needs your own file name. Both scripts build these paths relative to
-   the repo root (via a `BASE_DIR = os.path.dirname(os.path.abspath(__file__))`
-   at the top of each file).
-
-   `plot_error_plots.py` and `joint_angle_plot.py` are **not** wired to the
-   Second Skin schema — they load from a separate `Data/` dataset with a
-   different column layout (a legacy/exploratory dataset, referenced in their
-   default checkpoint filenames as the "Scherpeel Dataset") via a different
-   column-selection helper (`col_2_extract()`). They are not updated to point
-   at the bundled sample, since doing so would raise a `KeyError` (the column
-   names don't match) rather than silently working.
+4. **Point the scripts at your CSV.** `network_training.py`, `stats_cal.py`,
+   `plot_error_plots.py`, and `joint_angle_plot.py` each build their `data_path`
+   and checkpoint paths (e.g. `pae_model_file_path`) relative to the repo root
+   (via a `BASE_DIR = os.path.dirname(os.path.abspath(__file__))` at the top of
+   each file) — edit those variables near the top of each file to point at your
+   own CSV or checkpoint. In `network_training.py` and `stats_cal.py`, every such
+   filename is marked with a `# TODO:` comment right above it — search for
+   `TODO` in those files to find every spot that needs your own file name.
 
 ## Running the models
 

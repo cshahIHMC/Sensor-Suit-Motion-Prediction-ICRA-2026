@@ -57,12 +57,9 @@ def run_list(model_file_path, prediction_horizon, model_name):
     subject data at `prediction_horizon`, and print/plot the resulting statistics."""
 
     pae_model_file_path = os.path.join(BASE_DIR, "Saved Models", "20260212_0245_PAE on SS Dataset - 10 Subjects - 200 epochs (256 batch size).pth")
-    # Defaults to the bundled single-subject sample (same file used as the default
-    # training CSV in network_training.py) so this runs out of the box - note this
-    # means "test" and "train" are the same subject here, so results are only a
-    # smoke test, not a true held-out evaluation. TODO: point this at a real
-    # held-out test-subject CSV (produced by data_extraction.py) for actual results.
-    data_file_path = os.path.join(BASE_DIR, "Data - Second Skin", "Testing", "sample_data.csv")
+    # TODO: add the path to your held-out test-subject CSV here (produced by
+    # running data_extraction.py on your local copy of the dataset - see README).
+    data_file_path = os.path.join(BASE_DIR, "Data - Second Skin", "Testing", "<your_test_dataset>.csv")
 
     future_forcast = False
     

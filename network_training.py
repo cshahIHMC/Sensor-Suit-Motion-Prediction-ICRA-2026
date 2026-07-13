@@ -500,12 +500,9 @@ def main():
         print("Saving the model after training !!!")
     
     # Data Setup
-    # Defaults to the small single-subject sample CSV bundled with the repo
-    # (Data - Second Skin/Testing/sample_data.csv, subject AB01) so this script
-    # runs out of the box. TODO: once you've downloaded the full dataset and run
-    # data_extraction.py (see README), point this at your full multi-subject CSV
-    # (e.g. "9_subjects_req_data.csv") for real training runs.
-    data_path = os.path.join(BASE_DIR, "Data - Second Skin", "Testing", "sample_data.csv")
+    # TODO: add the path to your combined training CSV here (produced by running
+    # data_extraction.py on your local copy of the dataset - see README).
+    data_path = os.path.join(BASE_DIR, "Data - Second Skin", "Testing", "<your_dataset>.csv")
 
     # Model File to load
     # TODO: replace this filename with your own trained PAE checkpoint (only needed
