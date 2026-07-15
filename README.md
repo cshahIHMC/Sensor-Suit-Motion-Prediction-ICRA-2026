@@ -1,6 +1,6 @@
 # Sensor-Suit Motion Prediction (IROS 2026)
 
-**Author:** Chinmay Shah
+**Authors:** Chinmay Shah, Reese Peterson, Jared Li, Geoffrey Clark
 **Institution:** Institute for Human and Machine Cognition (IHMC) / University of West Florida (UWF)
 
 This repository contains the training, evaluation, and plotting code used for our
@@ -146,6 +146,19 @@ file — update them first) reproduce the paper's evaluation figures and tables:
   tables reported in the paper.
 
 ## Citations
+
+If you use this repository, please cite it. The associated paper is not yet
+published (submission pending); this entry will be replaced with the paper
+citation once it is available.
+
+```bibtex
+@misc{shah2026sensorsuit,
+  author = {Shah, Chinmay and Peterson, Reese and Li, Jared and Clark, Geoffrey},
+  title  = {Sensor-Suit Motion Prediction},
+  year   = {2026},
+  howpublished = {\url{https://github.com/cshahIHMC/Sensor-Suit-Motion-Prediction-ICRA-2026}}
+}
+```
 
 If you use the Periodic Autoencoder implementation in `Models/PAE.py`, please
 cite:
